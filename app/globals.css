@@ -1,26 +1,37 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 210 40% 98%;
+  --foreground: 222.2 47.4% 11.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47.4% 11.2%;
+  --primary: 199 89% 48%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 93%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 35% 92%;
+  --muted-foreground: 215 16% 44%;
+  --accent: 145 45% 92%;
+  --accent-foreground: 145 63% 16%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 85%;
+  --input: 214 32% 85%;
+  --ring: 199 89% 48%;
+  --radius: 0.7rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  @apply border-border;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-background text-foreground antialiased;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(14, 116, 144, 0.1), transparent 30%),
+    radial-gradient(circle at 90% 20%, rgba(22, 163, 74, 0.08), transparent 35%);
+  min-height: 100vh;
 }

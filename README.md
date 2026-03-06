@@ -1,36 +1,142 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Guest House Management System
 
-## Getting Started
+Full-stack Guest House Management System for colleges/institutions with role-based workflows.
 
-First, run the development server:
+## Stack
+
+- Frontend: Next.js 14 (App Router) + TypeScript
+- UI: Tailwind CSS + shadcn-style component primitives
+- Backend: Next.js API routes
+- Database: Microsoft SQL Server
+- Driver: `mssql`
+- Auth: JWT cookie session + role-based access
+
+## Roles
+
+- `EMPLOYEE`: Create, modify, cancel own bookings
+- `APPROVER`: Approve/reject official bookings
+- `ESTATE_PRIMARY`: Monitoring dashboard with booking details
+- `ESTATE_SECONDARY`: Room allocation, service approval, estate rejection
+
+## Features Implemented
+
+- Ecode login with JWT session
+- Role-based dashboard access
+- Booking form with:
+  - total guest auto-calculation
+  - rooms required auto-calculation
+- Cancellation/modify flow with search filters
+- Approver action screen
+- Estate manager primary and secondary screens
+- Reports:
+  - monthly bookings
+  - guest history
+  - room usage
+- Export reports to CSV/PDF
+
+## API Routes
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/bookings`
+- `GET /api/bookings`
+- `GET /api/bookings/:id`
+- `PUT /api/bookings/:id`
+- `POST /api/approval`
+- `POST /api/room-allocation`
+- `GET /api/reports?type=monthly|guest-history|room-usage`
+- `GET /api/reports/export?type=...&format=csv|pdf`
+
+## Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Create your env file:
+
+```bash
+copy .env.example .env.local
+```
+
+3. Update `.env.local` with your SQL Server details:
+
+```env
+DB_SERVER=192.168.1.20
+DB_PORT=1433
+DB_USER=sa
+DB_PASSWORD=your_password
+DB_NAME=guesthouse
+DB_ENCRYPT=false
+DB_TRUST_CERT=true
+```
+
+4. In SQL Server Configuration Manager:
+
+- Enable `TCP/IP` for your SQL Server instance.
+- Restart the SQL Server service.
+
+5. In Windows Firewall, allow inbound TCP `1433` from trusted machines.
+
+6. Create database and tables in SQL Server Management Studio:
+
+```sql
+-- Open and run: database/schema.sql
+```
+
+7. Insert sample data:
+
+```sql
+-- Open and run: database/seed.sql
+```
+
+8. Run the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+9. Verify database connection:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Open `http://localhost:3000/login`.
+- Sign in with a seed user.
+- If login works and dashboard data loads, DB connection is successful.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Step-by-Step: Connect to Database (Quick Guide)
 
-## Learn More
+1. Install SQL Server and SQL Server Management Studio.
+2. Enable SQL Authentication and create a login (for example `sa`).
+3. Enable `TCP/IP` and confirm port `1433`.
+4. Create database `guesthouse`.
+5. Run `database/schema.sql`.
+6. Run `database/seed.sql`.
+7. Set database values in `.env.local`.
+8. Start app with `npm run dev` and test login.
 
-To learn more about Next.js, take a look at the following resources:
+## Default Seed Logins
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `EMP001 / password`
+- `APP001 / password`
+- `EST001 / password`
+- `EST002 / password`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## LAN + Vercel Deployment Notes
 
-## Deploy on Vercel
+- Host SQL Server on LAN machine with static private IP (example: `192.168.1.20`).
+- Ensure SQL Server TCP/IP is enabled on port `1433`.
+- Allow inbound firewall rules for SQL Server from trusted internal subnets.
+- For Vercel-hosted frontend/API to reach on-prem SQL Server, expose backend securely:
+  - preferred: site-to-site VPN or private tunnel (Cloudflare Tunnel / Tailscale Funnel / reverse proxy),
+  - avoid direct public SQL port exposure.
+- If internal-only deployment is required, run this Next.js app on an internal server instead of public Vercel.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Folder Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `app/` App Router pages and API routes
+- `components/` UI and dashboard components
+- `lib/` DB, auth, validation, reports utilities
+- `database/schema.sql` SQL schema
+- `database/seed.sql` sample seed data
