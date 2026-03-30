@@ -8,10 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingForm } from "@/components/dashboard/booking-form";
 import { BookingManage } from "@/components/dashboard/booking-manage";
+import { MyBookings } from "@/components/dashboard/my-bookings";
 import { ApproverPanel } from "@/components/dashboard/approver-panel";
 import { EstatePrimaryPanel } from "@/components/dashboard/estate-primary-panel";
-import { EstateSecondaryPanel } from "@/components/dashboard/estate-secondary-panel";
+import { RoomAllocationPanel } from "@/components/dashboard/room-allocation-panel";
 import { ReportsPanel } from "@/components/dashboard/reports-panel";
+import { AdminUsersPanel } from "@/components/dashboard/admin-users-panel";
 import { roleLabel } from "@/components/dashboard/shared";
 import type { SessionUser } from "@/lib/types";
 
@@ -21,11 +23,12 @@ interface DashboardAppProps {
 
 export function DashboardApp({ user }: DashboardAppProps) {
   const router = useRouter();
+  const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
   const [tab, setTab] = useState(() => {
+    if (user.role === "ADMIN") return "admin";
     if (user.role === "EMPLOYEE") return "booking";
     if (user.role === "APPROVER") return "approval";
-    if (user.role === "ESTATE_PRIMARY") return "estate-primary";
-    return "estate-secondary";
+    return "estate-primary";
   });
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -47,11 +50,19 @@ export function DashboardApp({ user }: DashboardAppProps) {
     }
   }
 
+  const isAdmin = user.role === "ADMIN";
   const isEmployee = user.role === "EMPLOYEE";
   const isApprover = user.role === "APPROVER";
   const isPrimary = user.role === "ESTATE_PRIMARY";
-  const isSecondary = user.role === "ESTATE_SECONDARY";
-  const canViewReports = isApprover || isPrimary || isSecondary;
+  const canViewReports = isApprover || isPrimary || isAdmin;
+  const canSelfBook = isEmployee || isApprover || isPrimary || isAdmin;
+  const showEmployeeTabs = isEmployee || isAdmin;
+  const showApproverTabs = isApprover || isAdmin;
+  const showEstateTabs = isPrimary || isAdmin;
+  const handleBookingCreated = () => {
+    setBookingRefreshKey((prev) => prev + 1);
+    router.refresh();
+  };
 
   return (
     <div className="space-y-4">
@@ -81,47 +92,68 @@ export function DashboardApp({ user }: DashboardAppProps) {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto w-full flex-wrap gap-2 bg-transparent p-0">
-          {isEmployee ? <TabsTrigger value="booking">Booking</TabsTrigger> : null}
-          {isEmployee ? <TabsTrigger value="manage">Cancellation / Modify</TabsTrigger> : null}
-          {isApprover ? <TabsTrigger value="approval">Approval</TabsTrigger> : null}
-          {isPrimary ? <TabsTrigger value="estate-primary">Estate Primary</TabsTrigger> : null}
-          {isSecondary ? <TabsTrigger value="estate-secondary">Estate Secondary</TabsTrigger> : null}
+          {showEmployeeTabs ? <TabsTrigger value="booking">Booking</TabsTrigger> : null}
+          {showEmployeeTabs ? <TabsTrigger value="my-bookings">My Bookings</TabsTrigger> : null}
+          {showEmployeeTabs ? <TabsTrigger value="manage">Cancellation / Modify</TabsTrigger> : null}
+          {showApproverTabs ? <TabsTrigger value="approval">Approval</TabsTrigger> : null}
+          {showEstateTabs ? <TabsTrigger value="estate-primary">Estate Primary</TabsTrigger> : null}
+          {showEstateTabs ? <TabsTrigger value="room-allocation">Room Allocation</TabsTrigger> : null}
+          {!showEmployeeTabs && canSelfBook ? <TabsTrigger value="self-booking">Self Booking</TabsTrigger> : null}
           {canViewReports ? <TabsTrigger value="reports">Reports</TabsTrigger> : null}
+          {isAdmin ? <TabsTrigger value="admin">Admin</TabsTrigger> : null}
         </TabsList>
 
-        {isEmployee ? (
+        {showEmployeeTabs ? (
           <TabsContent value="booking">
-            <BookingForm />
+            <BookingForm onCreated={handleBookingCreated} />
           </TabsContent>
         ) : null}
 
-        {isEmployee ? (
+        {showEmployeeTabs ? (
+          <TabsContent value="my-bookings">
+            <MyBookings refreshKey={bookingRefreshKey} />
+          </TabsContent>
+        ) : null}
+
+        {showEmployeeTabs ? (
           <TabsContent value="manage">
-            <BookingManage />
+            <BookingManage refreshKey={bookingRefreshKey} onChanged={handleBookingCreated} />
           </TabsContent>
         ) : null}
 
-        {isApprover ? (
+        {showApproverTabs ? (
           <TabsContent value="approval">
             <ApproverPanel />
           </TabsContent>
         ) : null}
 
-        {isPrimary ? (
+        {showEstateTabs ? (
           <TabsContent value="estate-primary">
             <EstatePrimaryPanel />
           </TabsContent>
         ) : null}
 
-        {isSecondary ? (
-          <TabsContent value="estate-secondary">
-            <EstateSecondaryPanel />
+        {showEstateTabs ? (
+          <TabsContent value="room-allocation">
+            <RoomAllocationPanel />
+          </TabsContent>
+        ) : null}
+
+        {!showEmployeeTabs && canSelfBook ? (
+          <TabsContent value="self-booking">
+            <BookingForm onCreated={handleBookingCreated} />
           </TabsContent>
         ) : null}
 
         {canViewReports ? (
           <TabsContent value="reports">
             <ReportsPanel />
+          </TabsContent>
+        ) : null}
+
+        {isAdmin ? (
+          <TabsContent value="admin">
+            <AdminUsersPanel />
           </TabsContent>
         ) : null}
       </Tabs>

@@ -4,8 +4,8 @@ import type { ApprovalStatus, EstateStatus, Role } from "@/lib/types";
 export function roleLabel(role: Role) {
   if (role === "EMPLOYEE") return "Employee / Booking Creator";
   if (role === "APPROVER") return "Approving Authority";
-  if (role === "ESTATE_PRIMARY") return "Estate Manager (Primary)";
-  return "Estate Manager (Secondary/Admin)";
+  if (role === "ADMIN") return "Administrator";
+  return "Estate Manager (Primary)";
 }
 
 export function ApprovalBadge({ status }: { status: ApprovalStatus }) {

@@ -45,15 +45,11 @@ export async function POST(request: NextRequest) {
     const bookingCheck = await pool
       .request()
       .input("booking_id", parsed.data.booking_id)
-      .query("SELECT TOP 1 id, approval_status, purpose FROM Bookings WHERE id = @booking_id");
+      .query("SELECT TOP 1 id, approval_status FROM Bookings WHERE id = @booking_id");
 
     const booking = bookingCheck.recordset[0];
     if (!booking) {
       return NextResponse.json({ message: "Booking not found" }, { status: 404 });
-    }
-
-    if (booking.purpose !== "Official") {
-      return NextResponse.json({ message: "Only official bookings need approval workflow" }, { status: 400 });
     }
 
     const statusValue = parsed.data.decision === "Approved" ? "APPROVED" : "REJECTED";
@@ -106,6 +102,29 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url);
     const limit = Math.max(1, Math.min(25, Number(url.searchParams.get("limit")) || 8));
+    const includeDetails = url.searchParams.get("details") === "1";
+
+    if (includeDetails) {
+      const result = await pool
+        .request()
+        .input("approver_id", approverId)
+        .input("limit", limit)
+        .query(`
+          SELECT TOP (@limit)
+            a.id AS approval_id,
+            a.booking_id,
+            a.decision,
+            a.remarks,
+            a.[date] AS decided_at,
+            b.*
+          FROM Approvals a
+          INNER JOIN Bookings b ON b.id = a.booking_id
+          WHERE a.approver_id = @approver_id
+          ORDER BY a.[date] DESC
+        `);
+
+      return NextResponse.json({ approvals: result.recordset });
+    }
 
     const result = await pool
       .request()

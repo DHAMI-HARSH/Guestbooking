@@ -16,7 +16,6 @@ Full-stack Guest House Management System for colleges/institutions with role-bas
 - `EMPLOYEE`: Create, modify, cancel own bookings
 - `APPROVER`: Approve/reject official bookings
 - `ESTATE_PRIMARY`: Monitoring dashboard with booking details
-- `ESTATE_SECONDARY`: Room allocation, service approval, estate rejection
 
 ## Features Implemented
 

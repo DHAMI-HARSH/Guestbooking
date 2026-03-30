@@ -12,14 +12,23 @@ const guestSchema = z.object({
 });
 
 const bookingBaseSchema = z.object({
-  guest_name: z.string().min(2),
+  guest_name: z.string().min(2, "Booking person name is required"),
+  guest_email: z.string().email("Valid email is required"),
   guest_phone: z
     .string()
     .trim()
     .refine((value) => value.replace(/\D/g, "").length >= 8, {
       message: "Guest phone must have at least 8 digits",
     }),
-  guest_address: z.string().min(5),
+  guest_address: z.string().min(5, "Guest address is required"),
+  guest_pincode: z
+    .string()
+    .trim()
+    .refine((value) => /^\d{6}$/.test(value), {
+      message: "Pincode must be 6 digits",
+    }),
+  guest_city: z.string().min(2, "City is required"),
+  guest_state: z.string().min(2, "State is required"),
   room_configuration: z
     .enum(["Double Bed", "Triple Bed", "Twin Sharing"])
     .optional()
@@ -28,17 +37,18 @@ const bookingBaseSchema = z.object({
   extra_bed: z.boolean().optional().default(false),
   guests: z.array(guestSchema).optional().default([]),
   purpose: z.enum(["Official", "Personal"]),
-  justification: z.string().min(3),
-  arrival_date: z.string().min(8),
-  arrival_time: z.string().min(4),
-  departure_date: z.string().min(8),
-  departure_time: z.string().min(4),
-  stay_days: z.coerce.number().int().min(1),
+  justification: z.string().min(3, "Justification is required"),
+  special_requests: z.string().optional().nullable(),
+  arrival_date: z.string().min(8, "Arrival date is required"),
+  arrival_time: z.string().min(4, "Arrival time is required"),
+  departure_date: z.string().min(8, "Departure date is required"),
+  departure_time: z.string().min(4, "Departure time is required"),
+  stay_days: z.coerce.number().int().min(1, "Stay days must be at least 1"),
   male_count: z.coerce.number().int().min(0),
   female_count: z.coerce.number().int().min(0),
   children_count: z.coerce.number().int().min(0),
   services_required: z.array(z.enum(["Room", "Breakfast", "Lunch", "Dinner"])),
-  booking_cost_center: z.string().min(1),
+  booking_cost_center: z.string().min(1, "Cost center is required"),
   estimated_cost: z.coerce.number().min(0).optional().nullable(),
 });
 
@@ -74,6 +84,16 @@ export const approvalSchema = z.object({
   remarks: z.string().optional(),
 });
 
+export const adminUserSchema = z.object({
+  ecode: z.string().min(2, "Ecode is required"),
+  name: z.string().min(2, "Name is required"),
+  department: z.string().min(2, "Department is required"),
+  unit: z.string().optional().nullable(),
+  role: z.enum(["EMPLOYEE", "APPROVER", "ESTATE_PRIMARY", "ADMIN"]),
+  password: z.string().min(6, "Password is required"),
+  is_active: z.boolean().optional().default(true),
+});
+
 export const roomAllocationSchema = z.object({
   booking_id: z.number().int().positive(),
   room_number: z.string().min(1),
@@ -88,6 +108,7 @@ export function calculateTotals(input: {
   room_configuration?: "Double Bed" | "Triple Bed" | "Twin Sharing" | "";
 }) {
   const totalGuests = input.male_count + input.female_count + input.children_count;
+  const adultGuests = input.male_count + input.female_count;
   const roomRequested = input.services_required.includes("Room");
   const capacity =
     input.room_configuration === "Triple Bed"
@@ -95,6 +116,6 @@ export function calculateTotals(input: {
       : input.room_configuration === "Double Bed" || input.room_configuration === "Twin Sharing"
         ? 2
         : 2;
-  const roomsRequired = roomRequested ? Math.max(1, Math.ceil(totalGuests / capacity)) : 0;
+  const roomsRequired = roomRequested ? Math.max(1, Math.ceil(adultGuests / capacity)) : 0;
   return { totalGuests, roomsRequired };
 }

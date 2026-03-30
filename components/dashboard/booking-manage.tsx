@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
+import { formatDisplayDate } from "@/lib/date";
 import type { BookingRecord } from "@/lib/types";
 
 type BookingWithOwner = BookingRecord & {
@@ -17,9 +19,10 @@ type BookingWithOwner = BookingRecord & {
 
 interface BookingManageProps {
   onChanged?: () => void;
+  refreshKey?: number;
 }
 
-export function BookingManage({ onChanged }: BookingManageProps) {
+export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
   const [arrivalDate, setArrivalDate] = useState("");
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -101,6 +104,34 @@ export function BookingManage({ onChanged }: BookingManageProps) {
     }
   }
 
+  function updateStayDays(days: number) {
+    if (!editing) return;
+    const safeDays = Number.isFinite(days) && days > 0 ? days : 1;
+    const arrivalDate = String(editing.arrival_date).slice(0, 10);
+    const departure = format(addDays(new Date(arrivalDate), safeDays), "yyyy-MM-dd");
+    setEditing((prev) =>
+      prev ? { ...prev, stay_days: safeDays, departure_date: departure } : prev
+    );
+  }
+
+  function updateDepartureDate(value: string) {
+    if (!editing) return;
+    const arrivalDate = String(editing.arrival_date).slice(0, 10);
+    const stayDays = Math.max(
+      1,
+      differenceInCalendarDays(new Date(value), new Date(arrivalDate))
+    );
+    setEditing((prev) =>
+      prev ? { ...prev, departure_date: value, stay_days: stayDays } : prev
+    );
+  }
+
+  useEffect(() => {
+    if (!arrivalDate && !guestName && !guestPhone && bookings.length === 0) return;
+    void searchBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only when requested
+  }, [refreshKey]);
+
   return (
     <Card>
       <CardHeader>
@@ -149,7 +180,7 @@ export function BookingManage({ onChanged }: BookingManageProps) {
                 <TableCell>{booking.id}</TableCell>
                 <TableCell>{booking.guest_name}</TableCell>
                 <TableCell>{booking.guest_phone}</TableCell>
-                <TableCell>{String(booking.arrival_date).slice(0, 10)}</TableCell>
+                <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
                 <TableCell>
                   {booking.extra_bed ? (
                     <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
@@ -215,7 +246,7 @@ export function BookingManage({ onChanged }: BookingManageProps) {
                   type="number"
                   min={1}
                   value={editing.stay_days}
-                  onChange={(e) => setEditing((prev) => (prev ? { ...prev, stay_days: Number(e.target.value) } : prev))}
+                  onChange={(e) => updateStayDays(Number(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -223,7 +254,7 @@ export function BookingManage({ onChanged }: BookingManageProps) {
                 <Input
                   type="date"
                   value={String(editing.departure_date).slice(0, 10)}
-                  onChange={(e) => setEditing((prev) => (prev ? { ...prev, departure_date: e.target.value } : prev))}
+                  onChange={(e) => updateDepartureDate(e.target.value)}
                 />
               </div>
             </div>

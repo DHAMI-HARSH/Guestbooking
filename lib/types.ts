@@ -1,4 +1,4 @@
-export type Role = "EMPLOYEE" | "APPROVER" | "ESTATE_PRIMARY" | "ESTATE_SECONDARY";
+export type Role = "EMPLOYEE" | "APPROVER" | "ESTATE_PRIMARY" | "ADMIN";
 
 export type ApprovalStatus =
   | "PENDING_APPROVAL"
@@ -26,8 +26,12 @@ export interface SessionUser {
 export interface BookingRecord {
   id: number;
   guest_name: string;
+  guest_email: string;
   guest_phone: string;
   guest_address: string;
+  guest_pincode: string;
+  guest_city: string;
+  guest_state: string;
   room_configuration: string | null;
   meal_plan: "General" | "Special";
   guests: string | null;
@@ -47,9 +51,20 @@ export interface BookingRecord {
   services_required: string;
   rooms_required: number;
   booking_cost_center: string;
+  special_requests: string | null;
   created_by: number;
   approval_status: ApprovalStatus;
   estate_status: EstateStatus;
   cancellation_remarks: string | null;
+  created_at: string;
+}
+
+export type RoomAllocationStatus = "ALLOCATED" | "RELEASED";
+
+export interface RoomAllocationRecord {
+  id: number;
+  booking_id: number;
+  room_number: string;
+  allocation_status: RoomAllocationStatus;
   created_at: string;
 }

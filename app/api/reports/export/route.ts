@@ -71,7 +71,7 @@ async function toPdf(title: string, data: Record<string, unknown>[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRoles(request, ["APPROVER", "ESTATE_PRIMARY", "ESTATE_SECONDARY"]);
+  const auth = await requireRoles(request, ["APPROVER", "ESTATE_PRIMARY"]);
   if (!auth.authorized) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

@@ -5,7 +5,7 @@ import { DashboardApp } from "@/components/dashboard/dashboard-app";
 export default async function ApproverDashboardPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  if (session.role !== "APPROVER") redirect("/dashboard");
+  if (session.role !== "APPROVER" && session.role !== "ADMIN") redirect("/dashboard");
   return (
     <main className="mx-auto min-h-screen w-full max-w-7xl p-4 sm:p-6">
       <DashboardApp user={session} />

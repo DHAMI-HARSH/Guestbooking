@@ -11,8 +11,27 @@ const bookingRoles: Role[] = [
   "EMPLOYEE",
   "APPROVER",
   "ESTATE_PRIMARY",
-  "ESTATE_SECONDARY",
 ];
+
+function parseDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysUTC(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function diffDaysUTC(start: Date, end: Date) {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / msPerDay));
+}
 
 function parseId(id: string) {
   const value = Number(id);
@@ -25,7 +44,7 @@ async function resolveSessionUserId(
 ): Promise<number | null> {
   const result = await pool
     .request()
-    .input("ecode", sql.VarChar(20), ecode.trim().toUpperCase())
+    .input("ecode", ecode.trim().toUpperCase())
     .query(`
       SELECT TOP 1 id
       FROM Users
@@ -69,7 +88,7 @@ export async function GET(
 
     const result = await pool
       .request()
-      .input("booking_id", sql.Int, bookingId)
+      .input("booking_id", bookingId)
       .query(`
         SELECT TOP 1 
           b.*, 
@@ -150,7 +169,7 @@ export async function PUT(
 
     const bookingResult = await pool
       .request()
-      .input("booking_id", sql.Int, bookingId)
+      .input("booking_id", bookingId)
       .query(`SELECT TOP 1 * FROM Bookings WHERE id = @booking_id`);
 
     const current = bookingResult.recordset[0];
@@ -168,7 +187,11 @@ export async function PUT(
 
     /* ---- role restrictions ---- */
 
-    if (parsed.data.approval_status && effectiveSession.role !== "APPROVER") {
+    if (
+      parsed.data.approval_status &&
+      effectiveSession.role !== "APPROVER" &&
+      effectiveSession.role !== "ADMIN"
+    ) {
       const isCancellation =
         parsed.data.approval_status === "CANCELLED" &&
         canManageBooking(effectiveSession, current.created_by);
@@ -183,7 +206,8 @@ export async function PUT(
 
     if (
       parsed.data.estate_status &&
-      !["ESTATE_PRIMARY", "ESTATE_SECONDARY"].includes(effectiveSession.role)
+      effectiveSession.role !== "ESTATE_PRIMARY" &&
+      effectiveSession.role !== "ADMIN"
     ) {
       return NextResponse.json(
         { message: "Only estate manager can update estate status" },
@@ -217,42 +241,68 @@ export async function PUT(
         "",
     });
 
+    /* ---- keep stay_days and departure_date in sync ---- */
+
+    const arrivalDate = String(
+      parsed.data.arrival_date ?? current.arrival_date
+    ).slice(0, 10);
+
+    const derivedUpdates: Record<string, string | number> = {};
+
+    if (parsed.data.stay_days !== undefined && parsed.data.departure_date === undefined) {
+      const safeDays = Math.max(1, Number(parsed.data.stay_days) || 1);
+      const departure = formatDate(addDaysUTC(parseDate(arrivalDate), safeDays));
+      derivedUpdates.departure_date = departure;
+    }
+
+    if (parsed.data.departure_date !== undefined && parsed.data.stay_days === undefined) {
+      const stayDays = diffDaysUTC(
+        parseDate(arrivalDate),
+        parseDate(String(parsed.data.departure_date).slice(0, 10))
+      );
+      derivedUpdates.stay_days = stayDays;
+    }
+
     /* ---- build dynamic update ---- */
 
-    const req = pool.request().input("id", sql.Int, bookingId);
+    const req = pool.request().input("id", bookingId);
 
     const updates: string[] = [];
 
-    type SqlInputType = Parameters<sql.Request["input"]>[1];
-    const fields: Array<[keyof typeof parsed.data, SqlInputType]> = [
-      ["guest_name", sql.NVarChar(120)],
-      ["guest_phone", sql.VarChar(30)],
-      ["guest_address", sql.NVarChar(255)],
-      ["room_configuration", sql.NVarChar(50)],
-      ["meal_plan", sql.VarChar(20)],
-      ["extra_bed", sql.Bit],
-      ["purpose", sql.VarChar(20)],
-      ["justification", sql.NVarChar(sql.MAX)],
-      ["arrival_date", sql.Date],
-      ["arrival_time", sql.VarChar(8)],
-      ["departure_date", sql.Date],
-      ["departure_time", sql.VarChar(8)],
-      ["stay_days", sql.Int],
-      ["male_count", sql.Int],
-      ["female_count", sql.Int],
-      ["children_count", sql.Int],
-      ["booking_cost_center", sql.VarChar(50)],
-      ["approval_status", sql.VarChar(30)],
-      ["estate_status", sql.VarChar(40)],
-      ["cancellation_remarks", sql.NVarChar(sql.MAX)],
-      ["estimated_cost", sql.Decimal(10, 2)],
+    const fields: Array<keyof typeof parsed.data> = [
+      "guest_name",
+      "guest_email",
+      "guest_phone",
+      "guest_address",
+      "room_configuration",
+      "meal_plan",
+      "extra_bed",
+      "purpose",
+      "justification",
+      "arrival_date",
+      "arrival_time",
+      "departure_date",
+      "departure_time",
+      "stay_days",
+      "male_count",
+      "female_count",
+      "children_count",
+      "booking_cost_center",
+      "special_requests",
+      "approval_status",
+      "estate_status",
+      "cancellation_remarks",
+      "estimated_cost",
     ];
 
-    for (const [field, type] of fields) {
-      const value = parsed.data[field];
+    for (const field of fields) {
+      const value =
+        field in derivedUpdates
+          ? (derivedUpdates[field] as typeof parsed.data[typeof field])
+          : parsed.data[field];
 
       if (value !== undefined) {
-        req.input(field, type, value);
+        req.input(field, value as string | number | boolean | null);
         updates.push(`${field} = @${field}`);
       }
     }
@@ -260,24 +310,20 @@ export async function PUT(
     /* ---- services JSON ---- */
 
     if (parsed.data.services_required) {
-      req.input(
-        "services_required",
-        sql.NVarChar(sql.MAX),
-        JSON.stringify(parsed.data.services_required)
-      );
+      req.input("services_required", JSON.stringify(parsed.data.services_required));
 
       updates.push("services_required = @services_required");
     }
 
     if (parsed.data.guests) {
-      req.input("guests", sql.NVarChar(sql.MAX), JSON.stringify(parsed.data.guests));
+      req.input("guests", JSON.stringify(parsed.data.guests));
       updates.push("guests = @guests");
     }
 
     /* ---- totals ---- */
 
-    req.input("total_guests", sql.Int, totals.totalGuests);
-    req.input("rooms_required", sql.Int, totals.roomsRequired);
+    req.input("total_guests", totals.totalGuests);
+    req.input("rooms_required", totals.roomsRequired);
 
     updates.push(
       "total_guests = @total_guests",
@@ -298,9 +344,26 @@ export async function PUT(
       WHERE id = @id
     `);
 
+    const nextBooking = updated.recordset[0];
+    const shouldReleaseRooms =
+      parsed.data.approval_status === "CANCELLED" ||
+      parsed.data.estate_status === "ESTATE_REJECTED";
+
+    if (shouldReleaseRooms) {
+      await pool
+        .request()
+        .input("booking_id", bookingId)
+        .query(`
+          UPDATE RoomAllocation
+          SET allocation_status = 'RELEASED'
+          WHERE booking_id = @booking_id
+            AND allocation_status = 'ALLOCATED'
+        `);
+    }
+
     return NextResponse.json({
       message: "Booking updated",
-      booking: updated.recordset[0],
+      booking: nextBooking,
     });
 
   } catch (error) {

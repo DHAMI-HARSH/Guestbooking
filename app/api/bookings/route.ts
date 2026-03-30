@@ -10,7 +10,6 @@ const bookingRoles: Role[] = [
   "EMPLOYEE",
   "APPROVER",
   "ESTATE_PRIMARY",
-  "ESTATE_SECONDARY",
 ];
 
 async function resolveSessionUserId(
@@ -71,8 +70,12 @@ export async function POST(request: NextRequest) {
     const req = pool.request();
 
     req.input("guest_name", parsed.data.guest_name);
+    req.input("guest_email", parsed.data.guest_email);
     req.input("guest_phone", parsed.data.guest_phone);
     req.input("guest_address", parsed.data.guest_address);
+    req.input("guest_pincode", parsed.data.guest_pincode);
+    req.input("guest_city", parsed.data.guest_city);
+    req.input("guest_state", parsed.data.guest_state);
     req.input(
       "room_configuration",
       parsed.data.room_configuration || null
@@ -89,6 +92,7 @@ export async function POST(request: NextRequest) {
     );
     req.input("purpose", parsed.data.purpose);
     req.input("justification", parsed.data.justification);
+    req.input("special_requests", parsed.data.special_requests || null);
     req.input("arrival_date", parsed.data.arrival_date);
     req.input("arrival_time", parsed.data.arrival_time);
     req.input("departure_date", parsed.data.departure_date);
@@ -118,8 +122,12 @@ export async function POST(request: NextRequest) {
     const result = await req.query(`
       INSERT INTO Bookings (
         guest_name,
+        guest_email,
         guest_phone,
         guest_address,
+        guest_pincode,
+        guest_city,
+        guest_state,
         room_configuration,
         meal_plan,
         extra_bed,
@@ -127,6 +135,7 @@ export async function POST(request: NextRequest) {
         estimated_cost,
         purpose,
         justification,
+        special_requests,
         arrival_date,
         arrival_time,
         departure_date,
@@ -146,8 +155,12 @@ export async function POST(request: NextRequest) {
       OUTPUT INSERTED.*
       VALUES (
         @guest_name,
+        @guest_email,
         @guest_phone,
         @guest_address,
+        @guest_pincode,
+        @guest_city,
+        @guest_state,
         @room_configuration,
         @meal_plan,
         @extra_bed,
@@ -155,6 +168,7 @@ export async function POST(request: NextRequest) {
         @estimated_cost,
         @purpose,
         @justification,
+        @special_requests,
         @arrival_date,
         @arrival_time,
         @departure_date,
@@ -233,7 +247,6 @@ export async function GET(request: NextRequest) {
     /* Approver rules */
 
     if (auth.session.role === "APPROVER") {
-      conditions.push("b.purpose = 'Official'");
       conditions.push("b.approval_status = 'PENDING_APPROVAL'");
     }
 

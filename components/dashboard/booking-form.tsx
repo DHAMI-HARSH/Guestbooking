@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { addDays, format } from "date-fns";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,151 +23,20 @@ const mealRates = {
   Special: { Breakfast: 200, Lunch: 400, Dinner: 400 },
 } as const;
 
-const clockPositions = Array.from({ length: 12 }, (_, index) => {
-  const angle = (index / 12) * Math.PI * 2 - Math.PI / 2;
-  return { index, angle };
-});
-
-const meridiemOptions = [
-  { value: "AM", label: "AM" },
-  { value: "PM", label: "PM" },
-] as const;
-
 function splitTime(value: string) {
   const trimmed = value.trim();
   const parts = trimmed.split(/\s+/);
   const time = parts[0] || "12:00";
-  const meridiem = (parts[1] || "PM").toUpperCase();
-  return {
-    time,
-    meridiem: meridiem === "AM" ? "AM" : "PM",
-  };
+  return { time };
 }
 
-function buildTime(time: string, meridiem: "AM" | "PM") {
-  return `${time} ${meridiem}`;
+function buildTime(time: string) {
+  return time;
 }
 
-function TimeClockPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"hour" | "minute">("hour");
-  const parts = useMemo(() => splitTime(value), [value]);
-  const [rawHour, rawMinute] = parts.time.split(":");
-  const hour = Math.min(12, Math.max(1, Number(rawHour) || 12));
-  const minute = Math.min(59, Math.max(0, Number(rawMinute) || 0));
-  const hourLabel = String(hour);
-  const minuteLabel = String(minute).padStart(2, "0");
-  const currentValue = `${hourLabel}:${minuteLabel} ${parts.meridiem}`;
-
-  function setHour(nextHour: number) {
-    onChange(buildTime(`${nextHour}:${minuteLabel}`, parts.meridiem as "AM" | "PM"));
-    setMode("minute");
-  }
-
-  function setMinute(nextMinute: number) {
-    const safeMinute = String(nextMinute).padStart(2, "0");
-    onChange(buildTime(`${hourLabel}:${safeMinute}`, parts.meridiem as "AM" | "PM"));
-  }
-
-  function setMeridiem(next: "AM" | "PM") {
-    onChange(buildTime(`${hourLabel}:${minuteLabel}`, next));
-  }
-
-  const size = 200;
-  const radius = 78;
-  const center = size / 2;
-  const buttonSize = 30;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" onClick={() => setOpen((prev) => !prev)}>
-          {currentValue}
-        </Button>
-        <div className="flex items-center gap-2">
-          {meridiemOptions.map((option) => (
-            <Button
-              key={option.value}
-              type="button"
-              variant={parts.meridiem === option.value ? "secondary" : "outline"}
-              onClick={() => setMeridiem(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-      {open ? (
-        <div className="rounded-md border bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">
-              {mode === "hour" ? "Select Hour" : "Select Minute"}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant={mode === "hour" ? "secondary" : "outline"}
-                onClick={() => setMode("hour")}
-              >
-                Hour
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "minute" ? "secondary" : "outline"}
-                onClick={() => setMode("minute")}
-              >
-                Minute
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                Done
-              </Button>
-            </div>
-          </div>
-          <div
-            className="relative mx-auto mt-3 rounded-full border bg-slate-50"
-            style={{ width: size, height: size }}
-          >
-            {clockPositions.map(({ index, angle }) => {
-              const x = center + radius * Math.cos(angle) - buttonSize / 2;
-              const y = center + radius * Math.sin(angle) - buttonSize / 2;
-              const hourValue = index + 1;
-              const minuteValue = index * 5;
-              const isSelected =
-                mode === "hour" ? hourValue === hour : minuteValue === Math.round(minute / 5) * 5;
-              const label = mode === "hour"
-                ? String(hourValue)
-                : String(minuteValue).padStart(2, "0");
-              return (
-                <button
-                  key={`${mode}-${index}`}
-                  type="button"
-                  className={`absolute flex items-center justify-center rounded-full text-sm font-medium transition ${
-                    isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-white text-slate-700 hover:bg-slate-100"
-                  }`}
-                  style={{ width: buttonSize, height: buttonSize, left: x, top: y }}
-                  onClick={() =>
-                    mode === "hour" ? setHour(hourValue) : setMinute(minuteValue)
-                  }
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+function parseLocalDate(value: string) {
+  return new Date(`${value}T00:00:00`);
 }
-
 
 interface BookingFormProps {
   onCreated?: () => void;
@@ -175,8 +44,12 @@ interface BookingFormProps {
 
 interface BookingState {
   guest_name: string;
+  guest_email: string;
   guest_phone: string;
   guest_address: string;
+  guest_pincode: string;
+  guest_city: string;
+  guest_state: string;
   room_configuration: "Double Bed" | "Triple Bed" | "Twin Sharing" | "";
   meal_plan: "General" | "Special";
   extra_bed: boolean;
@@ -188,6 +61,7 @@ interface BookingState {
   }>;
   purpose: "Official" | "Personal";
   justification: string;
+  special_requests: string;
   arrival_date: string;
   arrival_time: string;
   departure_date: string;
@@ -202,24 +76,29 @@ interface BookingState {
 
 const initialState: BookingState = {
   guest_name: "",
+  guest_email: "",
   guest_phone: "",
   guest_address: "",
+  guest_pincode: "",
+  guest_city: "",
+  guest_state: "",
   room_configuration: "",
   meal_plan: "General",
   extra_bed: false,
   guests: [],
   purpose: "Official",
   justification: "",
+  special_requests: "",
   arrival_date: format(new Date(), "yyyy-MM-dd"),
-  arrival_time: "12:00 PM",
+  arrival_time: "12:00",
   departure_date: format(addDays(new Date(), 1), "yyyy-MM-dd"),
-  departure_time: "10:00 AM",
+  departure_time: "10:00",
   stay_days: 1,
   male_count: 1,
   female_count: 0,
   children_count: 0,
   services_required: ["Room"],
-  booking_cost_center: "",
+  booking_cost_center: "SELF",
 };
 
 export function BookingForm({ onCreated }: BookingFormProps) {
@@ -228,6 +107,10 @@ export function BookingForm({ onCreated }: BookingFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [estimatedCost, setEstimatedCost] = useState<number | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pincodeStatus, setPincodeStatus] = useState<string | null>(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [showSpecialRequests, setShowSpecialRequests] = useState(false);
 
   const derivedCounts = useMemo(() => {
     if (form.guests.length === 0) {
@@ -253,6 +136,10 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     () => derivedCounts.male + derivedCounts.female + derivedCounts.children,
     [derivedCounts],
   );
+  const adultGuests = useMemo(
+    () => derivedCounts.male + derivedCounts.female,
+    [derivedCounts],
+  );
   const hasChildren = derivedCounts.children > 0;
   const roomsRequired = useMemo(() => {
     if (!form.services_required.includes("Room")) return 0;
@@ -262,14 +149,67 @@ export function BookingForm({ onCreated }: BookingFormProps) {
         : form.room_configuration === "Double Bed" || form.room_configuration === "Twin Sharing"
           ? 2
           : 2;
-    return Math.max(1, Math.ceil(totalGuests / capacity));
-  }, [form.services_required, form.room_configuration, totalGuests]);
+    return Math.max(1, Math.ceil(adultGuests / capacity));
+  }, [form.services_required, form.room_configuration, adultGuests]);
 
   useEffect(() => {
     if (!hasChildren && form.extra_bed) {
       setForm((prev) => ({ ...prev, extra_bed: false }));
     }
   }, [hasChildren, form.extra_bed]);
+
+  useEffect(() => {
+    const pincode = form.guest_pincode.trim();
+    if (pincode.length === 0) {
+      setPincodeStatus(null);
+      return;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      setPincodeStatus("Enter a valid 6-digit pincode.");
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setPincodeLoading(true);
+      setPincodeStatus(null);
+      try {
+        const res = await fetch(`/api/pincode?pincode=${encodeURIComponent(pincode)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || "Pincode lookup failed");
+        }
+        setForm((prev) => ({
+          ...prev,
+          guest_city: data.city ?? prev.guest_city,
+          guest_state: data.state ?? prev.guest_state,
+        }));
+        setPincodeStatus(`Mapped to ${data.city}, ${data.state}.`);
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          delete next.guest_city;
+          delete next.guest_state;
+          delete next.guest_pincode;
+          return next;
+        });
+      } catch (lookupError) {
+        setPincodeStatus(
+          lookupError instanceof Error ? lookupError.message : "Pincode lookup failed"
+        );
+      } finally {
+        setPincodeLoading(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [form.guest_pincode]);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
 
   function handleAddGuest() {
@@ -291,7 +231,20 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     setForm((prev) => ({
       ...prev,
       guests: prev.guests.map((guest) =>
-        guest.id === id ? { ...guest, [key]: value } : guest,
+        guest.id === id
+          ? {
+              ...guest,
+              ...(key === "gender"
+                ? {
+                    gender: value as "Male" | "Female" | "Child",
+                    age:
+                      value === "Child" && Number(guest.age || 0) > 10 ? "10" : guest.age,
+                  }
+                : key === "age" && guest.gender === "Child"
+                  ? { age: String(Math.min(10, Number(value || 0))) }
+                  : { [key]: value }),
+            }
+          : guest,
       ),
     }));
   }
@@ -324,7 +277,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
 
   function updateStayDays(days: number) {
     const safeDays = Number.isFinite(days) && days > 0 ? days : 1;
-    const departure = addDays(new Date(form.arrival_date), safeDays);
+    const departure = addDays(parseLocalDate(form.arrival_date), safeDays);
     setForm((prev) => ({
       ...prev,
       stay_days: safeDays,
@@ -346,6 +299,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     setLoading(true);
     setError(null);
     setMessage(null);
+    setFieldErrors({});
 
     try {
       const payload = {
@@ -367,11 +321,20 @@ export function BookingForm({ onCreated }: BookingFormProps) {
         const firstFieldError = fieldErrors
           ? Object.values(fieldErrors).flat().find((msg) => typeof msg === "string")
           : undefined;
+        if (fieldErrors) {
+          setFieldErrors(
+            Object.fromEntries(
+              Object.entries(fieldErrors).map(([key, value]) => [key, value?.[0] || "Invalid value"])
+            )
+          );
+        }
         throw new Error(firstFieldError || data.detail || data.message || "Could not save booking");
       }
       setMessage("Booking submitted and marked as PENDING_APPROVAL.");
       setForm(initialState);
       setEstimatedCost(null);
+      setPincodeStatus(null);
+      setShowSpecialRequests(false);
       onCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit booking");
@@ -388,12 +351,29 @@ export function BookingForm({ onCreated }: BookingFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Guest Full Name</Label>
+            <Label>Booking Person Name</Label>
             <Input
               value={form.guest_name}
-              onChange={(e) => setForm((prev) => ({ ...prev, guest_name: e.target.value }))}
+              onChange={(e) => {
+                clearFieldError("guest_name");
+                setForm((prev) => ({ ...prev, guest_name: e.target.value }));
+              }}
               required
             />
+            {fieldErrors.guest_name ? <p className="text-xs text-red-600">{fieldErrors.guest_name}</p> : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Booking Person Email</Label>
+            <Input
+              type="email"
+              value={form.guest_email}
+              onChange={(e) => {
+                clearFieldError("guest_email");
+                setForm((prev) => ({ ...prev, guest_email: e.target.value }));
+              }}
+              required
+            />
+            {fieldErrors.guest_email ? <p className="text-xs text-red-600">{fieldErrors.guest_email}</p> : null}
           </div>
           <div className="space-y-1.5">
             <Label>Guest Mobile No</Label>
@@ -402,17 +382,25 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               minLength={8}
               placeholder="Enter at least 8 digits"
               value={form.guest_phone}
-              onChange={(e) => setForm((prev) => ({ ...prev, guest_phone: e.target.value }))}
+              onChange={(e) => {
+                clearFieldError("guest_phone");
+                setForm((prev) => ({ ...prev, guest_phone: e.target.value }));
+              }}
               required
             />
+            {fieldErrors.guest_phone ? <p className="text-xs text-red-600">{fieldErrors.guest_phone}</p> : null}
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <Label>Guest Address</Label>
             <Input
               value={form.guest_address}
-              onChange={(e) => setForm((prev) => ({ ...prev, guest_address: e.target.value }))}
+              onChange={(e) => {
+                clearFieldError("guest_address");
+                setForm((prev) => ({ ...prev, guest_address: e.target.value }));
+              }}
               required
             />
+            {fieldErrors.guest_address ? <p className="text-xs text-red-600">{fieldErrors.guest_address}</p> : null}
             <div className="flex items-center gap-2 text-sm">
               <span className="text-base">*</span>
               <span className="font-semibold">
@@ -420,13 +408,85 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               </span>
             </div>
           </div>
+          <div className="md:col-span-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowSpecialRequests((prev) => !prev)}
+            >
+              Special Requests
+            </Button>
+            {showSpecialRequests ? (
+              <div className="mt-2 space-y-1.5">
+                <Label>Special Requests</Label>
+                <Textarea
+                  value={form.special_requests}
+                  onChange={(e) => {
+                    clearFieldError("special_requests");
+                    setForm((prev) => ({ ...prev, special_requests: e.target.value }));
+                  }}
+                />
+                {fieldErrors.special_requests ? (
+                  <p className="text-xs text-red-600">{fieldErrors.special_requests}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Pincode</Label>
+            <Input
+              inputMode="numeric"
+              maxLength={6}
+              value={form.guest_pincode}
+              onChange={(e) => {
+                clearFieldError("guest_pincode");
+                setForm((prev) => ({ ...prev, guest_pincode: e.target.value.replace(/\D/g, "") }));
+              }}
+              required
+            />
+            {pincodeLoading ? (
+              <p className="text-xs text-muted-foreground">Looking up pincode...</p>
+            ) : null}
+            {pincodeStatus ? <p className="text-xs text-muted-foreground">{pincodeStatus}</p> : null}
+            {fieldErrors.guest_pincode ? (
+              <p className="text-xs text-red-600">{fieldErrors.guest_pincode}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label>City</Label>
+            <Input
+              value={form.guest_city}
+              onChange={(e) => {
+                clearFieldError("guest_city");
+                setForm((prev) => ({ ...prev, guest_city: e.target.value }));
+              }}
+              required
+            />
+            {fieldErrors.guest_city ? <p className="text-xs text-red-600">{fieldErrors.guest_city}</p> : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label>State</Label>
+            <Input
+              value={form.guest_state}
+              onChange={(e) => {
+                clearFieldError("guest_state");
+                setForm((prev) => ({ ...prev, guest_state: e.target.value }));
+              }}
+              required
+            />
+            {fieldErrors.guest_state ? <p className="text-xs text-red-600">{fieldErrors.guest_state}</p> : null}
+          </div>
 
           <div className="space-y-1.5">
             <Label>Room Configuration</Label>
             <Select
               value={form.room_configuration}
               onValueChange={(value: BookingState["room_configuration"]) =>
-                setForm((prev) => ({ ...prev, room_configuration: value }))
+                setForm((prev) => {
+                  clearFieldError("room_configuration");
+                  return { ...prev, room_configuration: value };
+                })
               }
             >
               <SelectTrigger>
@@ -440,6 +500,9 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.room_configuration ? (
+              <p className="text-xs text-red-600">{fieldErrors.room_configuration}</p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -467,7 +530,16 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             <Label>Purpose</Label>
             <Select
               value={form.purpose}
-              onValueChange={(value: "Official" | "Personal") => setForm((prev) => ({ ...prev, purpose: value }))}
+              onValueChange={(value: "Official" | "Personal") =>
+                setForm((prev) => ({
+                  ...prev,
+                  purpose: value,
+                  justification:
+                    value === "Personal" && prev.justification.trim().length < 3
+                      ? "Personal booking"
+                      : prev.justification,
+                }))
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select purpose" />
@@ -479,14 +551,20 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             </Select>
           </div>
 
-          <div className="space-y-1.5 md:col-span-2">
-            <Label>Justification</Label>
-            <Textarea
-              value={form.justification}
-              onChange={(e) => setForm((prev) => ({ ...prev, justification: e.target.value }))}
-              required
-            />
-          </div>
+          {form.purpose === "Official" ? (
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Justification</Label>
+              <Textarea
+                value={form.justification}
+                onChange={(e) => {
+                  clearFieldError("justification");
+                  setForm((prev) => ({ ...prev, justification: e.target.value }));
+                }}
+                required
+              />
+              {fieldErrors.justification ? <p className="text-xs text-red-600">{fieldErrors.justification}</p> : null}
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label>Arrival Date</Label>
@@ -494,8 +572,13 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               type="date"
               value={form.arrival_date}
               onChange={(e) => {
+                clearFieldError("arrival_date");
                 const arrivalDate = e.target.value;
-                const departure = addDays(new Date(arrivalDate), form.stay_days);
+                if (!arrivalDate) {
+                  setForm((prev) => ({ ...prev, arrival_date: arrivalDate }));
+                  return;
+                }
+                const departure = addDays(parseLocalDate(arrivalDate), form.stay_days);
                 setForm((prev) => ({
                   ...prev,
                   arrival_date: arrivalDate,
@@ -504,12 +587,15 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               }}
               required
             />
+            {fieldErrors.arrival_date ? <p className="text-xs text-red-600">{fieldErrors.arrival_date}</p> : null}
           </div>
           <div className="space-y-1.5">
-            <Label>Arrival Time</Label>
-            <TimeClockPicker
-              value={form.arrival_time}
-              onChange={(next) => setForm((prev) => ({ ...prev, arrival_time: next }))}
+            <Label>Arrival Time (24-hour)</Label>
+            <Input
+              type="time"
+              value={splitTime(form.arrival_time).time}
+              onChange={(e) => setForm((prev) => ({ ...prev, arrival_time: buildTime(e.target.value) }))}
+              required
             />
           </div>
           <div className="space-y-1.5">
@@ -518,58 +604,51 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               type="number"
               min={1}
               value={form.stay_days}
-              onChange={(e) => updateStayDays(Number(e.target.value))}
+              onChange={(e) => {
+                clearFieldError("stay_days");
+                updateStayDays(Number(e.target.value));
+              }}
               required
             />
+            {fieldErrors.stay_days ? <p className="text-xs text-red-600">{fieldErrors.stay_days}</p> : null}
           </div>
           <div className="space-y-1.5">
             <Label>Departure Date</Label>
             <Input
               type="date"
               value={form.departure_date}
-              onChange={(e) => setForm((prev) => ({ ...prev, departure_date: e.target.value }))}
+              onChange={(e) => {
+                clearFieldError("departure_date");
+                const value = e.target.value;
+                if (!value) {
+                  setForm((prev) => ({ ...prev, departure_date: value }));
+                  return;
+                }
+                const stayDays = Math.max(
+                  1,
+                  differenceInCalendarDays(
+                    parseLocalDate(value),
+                    parseLocalDate(form.arrival_date)
+                  )
+                );
+                setForm((prev) => ({
+                  ...prev,
+                  departure_date: value,
+                  stay_days: stayDays,
+                }));
+              }}
               required
             />
+            {fieldErrors.departure_date ? <p className="text-xs text-red-600">{fieldErrors.departure_date}</p> : null}
           </div>
           <div className="space-y-1.5">
-            <Label>Departure Time</Label>
-            <TimeClockPicker
-              value={form.departure_time}
-              onChange={(next) => setForm((prev) => ({ ...prev, departure_time: next }))}
+            <Label>Departure Time (24-hour)</Label>
+            <Input
+              type="time"
+              value={splitTime(form.departure_time).time}
+              onChange={(e) => setForm((prev) => ({ ...prev, departure_time: buildTime(e.target.value) }))}
+              required
             />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 md:col-span-2">
-            <div className="space-y-1.5">
-              <Label>Male</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.guests.length > 0 ? derivedCounts.male : form.male_count}
-                disabled={form.guests.length > 0}
-                onChange={(e) => setForm((prev) => ({ ...prev, male_count: Number(e.target.value) || 0 }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Female</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.guests.length > 0 ? derivedCounts.female : form.female_count}
-                disabled={form.guests.length > 0}
-                onChange={(e) => setForm((prev) => ({ ...prev, female_count: Number(e.target.value) || 0 }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Children</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.guests.length > 0 ? derivedCounts.children : form.children_count}
-                disabled={form.guests.length > 0}
-                onChange={(e) => setForm((prev) => ({ ...prev, children_count: Number(e.target.value) || 0 }))}
-              />
-            </div>
           </div>
 
           <div className="rounded-md border bg-secondary/40 p-3 md:col-span-2">
@@ -640,9 +719,13 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                       <Input
                         type="number"
                         min={0}
+                        max={guest.gender === "Child" ? 10 : undefined}
                         value={guest.age}
                         onChange={(e) => handleGuestChange(guest.id, "age", e.target.value)}
                       />
+                      {guest.gender === "Child" ? (
+                        <p className="text-xs text-muted-foreground">Child age must be 10 or below.</p>
+                      ) : null}
                     </div>
                     <div className="md:col-span-4">
                       <Button type="button" variant="ghost" onClick={() => handleRemoveGuest(guest.id)}>
@@ -654,6 +737,39 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               </div>
             )}
           </div>
+
+          <div className="grid grid-cols-3 gap-3 md:col-span-2">
+            <div className="space-y-1.5">
+              <Label>Male</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.guests.length > 0 ? derivedCounts.male : form.male_count}
+                disabled
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Female</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.guests.length > 0 ? derivedCounts.female : form.female_count}
+                disabled
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Children</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.guests.length > 0 ? derivedCounts.children : form.children_count}
+                disabled
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground md:col-span-2">
+            Counts are auto-calculated from the guest list. Children age must be less than 10.
+          </p>
 
           <div className="space-y-2 md:col-span-2">
             <Label>Services Required</Label>
@@ -668,16 +784,6 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                 );
               })}
             </div>
-          </div>
-
-          <div className="space-y-1.5 md:col-span-2">
-            <Label>Booking Cost Center</Label>
-            <Input
-              value={form.booking_cost_center}
-              onChange={(e) => setForm((prev) => ({ ...prev, booking_cost_center: e.target.value }))}
-              required
-            />
-            <p className="text-xs text-muted-foreground">Enter the cost center code for billing.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 md:col-span-2">

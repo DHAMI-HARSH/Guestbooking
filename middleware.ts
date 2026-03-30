@@ -9,7 +9,8 @@ const rolePathMap: Record<string, Role[]> = {
   "/dashboard/employee": ["EMPLOYEE"],
   "/dashboard/approver": ["APPROVER"],
   "/dashboard/estate-primary": ["ESTATE_PRIMARY"],
-  "/dashboard/estate-secondary": ["ESTATE_SECONDARY"],
+  "/dashboard/room-allocation": ["ESTATE_PRIMARY"],
+  "/dashboard/admin": ["ADMIN"],
 };
 
 export async function middleware(request: NextRequest) {
@@ -64,7 +65,7 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(resolvedSecret));
     const user = payload.user as { role: Role };
     const roleRule = Object.entries(rolePathMap).find(([route]) => pathname.startsWith(route));
-    if (roleRule && !roleRule[1].includes(user.role)) {
+    if (roleRule && !roleRule[1].includes(user.role) && user.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();

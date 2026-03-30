@@ -4,7 +4,7 @@ import { requireRoles } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
-const reportRoles = ["APPROVER", "ESTATE_PRIMARY", "ESTATE_SECONDARY"] as const;
+const reportRoles = ["APPROVER", "ESTATE_PRIMARY"] as const;
 
 function parseType(raw: string | null): ReportType | null {
   if (raw === "monthly" || raw === "guest-history" || raw === "room-usage") {
