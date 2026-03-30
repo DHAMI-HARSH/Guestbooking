@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { parseServices } from "@/lib/utils";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
 import type { BookingRecord } from "@/lib/types";
+import { X } from "lucide-react";
 
 type BookingWithOwner = BookingRecord & {
   booking_owner_name?: string;
@@ -127,7 +128,9 @@ export function EstateSecondaryPanel() {
               <TableHead>ID</TableHead>
               <TableHead>Guest</TableHead>
               <TableHead>Arrival</TableHead>
+              <TableHead>Booked On</TableHead>
               <TableHead>Guests</TableHead>
+              <TableHead>Extras</TableHead>
               <TableHead>Approval</TableHead>
               <TableHead>Estate</TableHead>
               <TableHead>Action</TableHead>
@@ -139,7 +142,20 @@ export function EstateSecondaryPanel() {
                 <TableCell>#{booking.id}</TableCell>
                 <TableCell>{booking.guest_name}</TableCell>
                 <TableCell>{String(booking.arrival_date).slice(0, 10)}</TableCell>
+                <TableCell>
+                  <div>{new Date(booking.created_at).toLocaleDateString()}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </TableCell>
                 <TableCell>{booking.total_guests}</TableCell>
+                <TableCell>
+                  {booking.extra_bed ? (
+                    <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <ApprovalBadge status={booking.approval_status} />
                 </TableCell>
@@ -147,8 +163,18 @@ export function EstateSecondaryPanel() {
                   <EstateBadge status={booking.estate_status} />
                 </TableCell>
                 <TableCell>
-                  <Button variant="outline" size="sm" onClick={() => setSelected(booking)}>
-                    Open
+                  <Button
+                    variant={selected?.id === booking.id ? "destructive" : "outline"}
+                    size="sm"
+                    onClick={() =>
+                      setSelected((prev) => (prev?.id === booking.id ? null : booking))
+                    }
+                  >
+                    {selected?.id === booking.id ? (
+                      <X className="h-4 w-4" />
+                    ) : (
+                      "Open"
+                    )}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -178,6 +204,10 @@ export function EstateSecondaryPanel() {
               </p>
               <p>
                 <span className="font-medium">Rooms Required:</span> {selected.rooms_required}
+              </p>
+              <p>
+                <span className="font-medium">Extra Bed:</span>{" "}
+                {selected.extra_bed ? "Yes (Free)" : "No"}
               </p>
               <p className="md:col-span-2">
                 <span className="font-medium">Services:</span> {services.join(", ") || "None"}

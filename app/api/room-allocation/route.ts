@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDbPool, sql } from "@/lib/db";
+import sql from "mssql";
+import { getDbPool } from "@/lib/db";
 import { requireRoles } from "@/lib/permissions";
 import { roomAllocationSchema } from "@/lib/validation";
 

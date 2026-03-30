@@ -46,9 +46,9 @@ export function LoginForm() {
       <CardHeader className="space-y-3">
         <div className="inline-flex w-fit items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
           <ShieldCheck className="h-4 w-4" />
-          Role Based Access
+          Secure Access
         </div>
-        <CardTitle className="text-2xl">Guest House Management</CardTitle>
+        <CardTitle className="text-2xl">SRHU Guest House Booking</CardTitle>
         <CardDescription className="flex items-center gap-2">
           <Building2 className="h-4 w-4" />
           Use your employee ecode credentials to continue.

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
 import type { BookingRecord } from "@/lib/types";
+import { X } from "lucide-react";
 
 type BookingWithOwner = BookingRecord & {
   booking_owner_name?: string;
@@ -54,8 +55,10 @@ export function EstatePrimaryPanel() {
           <TableHeader>
             <TableRow>
               <TableHead>Arrival Date</TableHead>
+              <TableHead>Booked On</TableHead>
               <TableHead>Guest</TableHead>
               <TableHead>Contact</TableHead>
+              <TableHead>Extras</TableHead>
               <TableHead>Booking Owner</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Approval Status</TableHead>
@@ -67,8 +70,21 @@ export function EstatePrimaryPanel() {
             {bookings.map((booking) => (
               <TableRow key={booking.id}>
                 <TableCell>{String(booking.arrival_date).slice(0, 10)}</TableCell>
+                <TableCell>
+                  <div>{new Date(booking.created_at).toLocaleDateString()}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </TableCell>
                 <TableCell>{booking.guest_name}</TableCell>
                 <TableCell>{booking.guest_phone}</TableCell>
+                <TableCell>
+                  {booking.extra_bed ? (
+                    <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </TableCell>
                 <TableCell>{booking.booking_owner_name}</TableCell>
                 <TableCell>{booking.booking_owner_department}</TableCell>
                 <TableCell>
@@ -78,8 +94,18 @@ export function EstatePrimaryPanel() {
                   <EstateBadge status={booking.estate_status} />
                 </TableCell>
                 <TableCell>
-                  <Button size="sm" variant="outline" onClick={() => setSelected(booking)}>
-                    OPEN
+                  <Button
+                    size="sm"
+                    variant={selected?.id === booking.id ? "destructive" : "outline"}
+                    onClick={() =>
+                      setSelected((prev) => (prev?.id === booking.id ? null : booking))
+                    }
+                  >
+                    {selected?.id === booking.id ? (
+                      <X className="h-4 w-4" />
+                    ) : (
+                      "OPEN"
+                    )}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -108,6 +134,9 @@ export function EstatePrimaryPanel() {
               </p>
               <p>
                 <span className="font-medium">Total Guests:</span> {selected.total_guests}
+              </p>
+              <p>
+                <span className="font-medium">Extra Bed:</span> {selected.extra_bed ? "Yes (Free)" : "No"}
               </p>
               <p className="md:col-span-2">
                 <span className="font-medium">Justification:</span> {selected.justification}

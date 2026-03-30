@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,7 +20,7 @@ interface BookingManageProps {
 }
 
 export function BookingManage({ onChanged }: BookingManageProps) {
-  const [arrivalDate, setArrivalDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [arrivalDate, setArrivalDate] = useState("");
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [bookings, setBookings] = useState<BookingWithOwner[]>([]);
@@ -138,6 +137,7 @@ export function BookingManage({ onChanged }: BookingManageProps) {
               <TableHead>Guest</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Arrival</TableHead>
+              <TableHead>Extras</TableHead>
               <TableHead>Approval</TableHead>
               <TableHead>Estate</TableHead>
               <TableHead>Actions</TableHead>
@@ -150,6 +150,13 @@ export function BookingManage({ onChanged }: BookingManageProps) {
                 <TableCell>{booking.guest_name}</TableCell>
                 <TableCell>{booking.guest_phone}</TableCell>
                 <TableCell>{String(booking.arrival_date).slice(0, 10)}</TableCell>
+                <TableCell>
+                  {booking.extra_bed ? (
+                    <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <ApprovalBadge status={booking.approval_status} />
                 </TableCell>

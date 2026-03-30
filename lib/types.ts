@@ -28,6 +28,11 @@ export interface BookingRecord {
   guest_name: string;
   guest_phone: string;
   guest_address: string;
+  room_configuration: string | null;
+  meal_plan: "General" | "Special";
+  guests: string | null;
+  estimated_cost: number | null;
+  extra_bed: boolean;
   purpose: "Official" | "Personal";
   justification: string;
   arrival_date: string;

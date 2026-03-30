@@ -31,9 +31,20 @@ export function DashboardApp({ user }: DashboardAppProps) {
 
   async function handleLogout() {
     setLoggingOut(true);
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        console.error("Logout failed", response.status);
+      }
+    } catch (error) {
+      console.error("Logout error", error);
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
   }
 
   const isEmployee = user.role === "EMPLOYEE";

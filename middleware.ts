@@ -14,6 +14,9 @@ const rolePathMap: Record<string, Role[]> = {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isHttps =
+    request.headers.get("x-forwarded-proto") === "https" ||
+    request.nextUrl.protocol === "https:";
 
   if (pathname.startsWith("/login") || pathname.startsWith("/api/auth/login")) {
     return NextResponse.next();
@@ -26,9 +29,27 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) {
     if (pathname.startsWith("/api")) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      const response = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      response.cookies.set(SESSION_COOKIE, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: isHttps,
+        path: "/",
+        maxAge: 0,
+        expires: new Date(0),
+      });
+      return response;
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.set(SESSION_COOKIE, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isHttps,
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+    });
+    return response;
   }
 
   try {
@@ -49,9 +70,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   } catch {
     if (pathname.startsWith("/api")) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      const response = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      response.cookies.set(SESSION_COOKIE, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: isHttps,
+        path: "/",
+        maxAge: 0,
+        expires: new Date(0),
+      });
+      return response;
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.set(SESSION_COOKIE, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isHttps,
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+    });
+    return response;
   }
 }
 
