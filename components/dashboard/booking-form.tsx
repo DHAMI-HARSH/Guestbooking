@@ -138,6 +138,87 @@ export function BookingForm({ onCreated }: BookingFormProps) {
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [showSpecialRequests, setShowSpecialRequests] = useState(false);
   const [showFoodReservations, setShowFoodReservations] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const stepLabels = [
+    { label: "Basic details", description: "Booking initiator, contact and purpose" },
+    { label: "Stay details", description: "Arrival, departure and stay dates" },
+    { label: "Guest details", description: "Guest list and guest count details" },
+    { label: "Room & food", description: "Room selection, services and meal plan" },
+    { label: "Review & submit", description: "Confirm your booking details before submit" },
+  ];
+
+  const isFirstStep = currentStep === 0;
+  const isLastStep = currentStep === stepLabels.length - 1;
+  const reviewStepIndex = stepLabels.length - 1;
+
+  const validateStep = (step: number) => {
+    if (step === 0) {
+      const hasBasic = [
+        form.guest_name,
+        form.guest_email,
+        form.guest_phone,
+        form.guest_address,
+        form.guest_pincode,
+        form.guest_city,
+        form.guest_state,
+      ].every(Boolean);
+      const hasPurpose = form.purpose === "Personal" || form.justification.trim().length > 0;
+      return hasBasic && hasPurpose;
+    }
+
+    if (step === 1) {
+      return (
+        Boolean(form.arrival_date) &&
+        Boolean(form.arrival_time) &&
+        Boolean(form.departure_date) &&
+        Boolean(form.departure_time) &&
+        form.stay_days > 0
+      );
+    }
+
+    if (step === 2) {
+      if (form.guests.length === 0) {
+        return true;
+      }
+      return form.guests.every((guest) =>
+        Boolean(guest.name) &&
+        Boolean(guest.age) &&
+        Boolean(guest.arrival_date) &&
+        Boolean(guest.arrival_time) &&
+        Boolean(guest.departure_date) &&
+        Boolean(guest.departure_time)
+      );
+    }
+
+    if (step === 3) {
+      if (form.services_required.length === 0) return false;
+      if (form.services_required.includes("Room")) {
+        return (
+          Object.values(form.room_selection).some((count) => count > 0) ||
+          form.special_requests.trim().length > 0
+        );
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  const isReviewReady = () =>
+    validateStep(0) && validateStep(1) && validateStep(2) && validateStep(3);
+
+  const canNavigateToStep = (target: number) => {
+    if (target === reviewStepIndex) return isReviewReady();
+    return true;
+  };
+
+  useEffect(() => {
+    if (currentStep === reviewStepIndex && !isReviewReady()) {
+      setCurrentStep(reviewStepIndex - 1);
+    }
+  }, [currentStep, reviewStepIndex, form]);
+
   const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
   const maxArrivalStr = useMemo(() => format(addMonths(new Date(), 1), "yyyy-MM-dd"), []);
   const selectedMealServices = useMemo(
@@ -520,9 +601,92 @@ export function BookingForm({ onCreated }: BookingFormProps) {
         <CardTitle>Create Guest Booking</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Booking Initiator</Label>
+        <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] items-start">
+          <aside className="hidden lg:block">
+            <div className="sticky top-6 min-h-[620px] space-y-4 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">Booking steps</p>
+                <p className="text-sm text-slate-600">Complete each step in order to continue.</p>
+              </div>
+              <div className="space-y-3">
+                {stepLabels.map((step, index) => {
+                  const completed = index < currentStep;
+                  const active = index === currentStep;
+                  return (
+                    <button
+                      key={step.label}
+                      type="button"
+                      disabled={!canNavigateToStep(index)}
+                      onClick={() => canNavigateToStep(index) && setCurrentStep(index)}
+                      className={`w-full rounded-3xl border px-4 py-4 text-left text-sm transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${
+                        active
+                          ? "border-sky-500 bg-sky-50 text-sky-900 shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`grid h-9 w-9 place-items-center rounded-full border text-xs font-semibold ${
+                          completed
+                            ? "border-sky-500 bg-sky-500 text-white"
+                            : active
+                              ? "border-sky-500 bg-white text-sky-900"
+                              : "border-slate-300 bg-white text-slate-500"
+                        }`}>
+                          {completed ? "✓" : index + 1}
+                        </span>
+                        <div>
+                          <div className="font-semibold">{step.label}</div>
+                          <div className="text-xs text-muted-foreground">{step.description}</div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+
+          <div className="grid gap-4 min-h-[560px]">
+            <div className="lg:hidden">
+              <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Step {currentStep + 1} of {stepLabels.length}</p>
+                      <p className="text-xs text-slate-500">{stepLabels[currentStep].label}</p>
+                    </div>
+                    <div className="grid h-10 w-10 place-items-center rounded-full border border-slate-300 bg-white text-sm font-semibold text-slate-700">
+                      {currentStep + 1}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {stepLabels.map((step, index) => (
+                      <div
+                        key={step.label}
+                        className={`h-2 rounded-full ${
+                          index <= currentStep ? "bg-sky-500" : "bg-slate-200"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-sky-700">Step {currentStep + 1} of {stepLabels.length}</p>
+                  <h2 className="text-2xl font-semibold text-slate-900">{stepLabels[currentStep].label}</h2>
+                </div>
+                <p className="max-w-xl text-sm leading-6 text-slate-600">{stepLabels[currentStep].description}</p>
+              </div>
+            </div>
+
+          {currentStep === 0 && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Booking Initiator</Label>
             <Input
               value={form.guest_name}
               onChange={(e) => {
@@ -685,9 +849,13 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               {fieldErrors.justification ? <p className="text-xs text-red-600">{fieldErrors.justification}</p> : null}
             </div>
           ) : null}
+          </>
+          )}
 
-          <div className="space-y-1.5">
-            <Label>Arrival Date</Label>
+          {currentStep === 1 && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Arrival Date</Label>
             <Input
               type="date"
               value={form.arrival_date}
@@ -768,9 +936,13 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               required
             />
           </div>
+          </>
+          )}
 
-          <div className="space-y-2 md:col-span-2">
-            <div className="flex items-center justify-between">
+          {currentStep === 2 && (
+            <>
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between">
               <Label>Guest List</Label>
               <Button type="button" variant="outline" onClick={handleAddGuest}>
                 Add Guest
@@ -917,9 +1089,13 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               <p className="text-xs text-muted-foreground">Guest counts are auto-calculated from the guest list.</p>
             ) : null}
           </div>
+          </>
+          )}
 
-          <div className="space-y-2 md:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          {currentStep === 3 && (
+            <>
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
               <Label>Services Required</Label>
               <Button
                 type="button"
@@ -1048,14 +1224,121 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             )}
           </div>
 
-          {message ? <p className="text-sm font-medium text-emerald-600 md:col-span-2">{message}</p> : null}
-          {error ? <p className="text-sm font-medium text-red-600 md:col-span-2">{error}</p> : null}
+          </>
+          )}
 
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Booking"}
-            </Button>
+          {currentStep === 4 && (
+            <>
+              <div className="md:col-span-2 space-y-4">
+                <div className="rounded-lg border bg-slate-50 p-4 shadow-sm">
+                  <p className="text-lg font-semibold">Final review</p>
+                  <p className="text-sm text-muted-foreground">Review your completed booking details before submitting.</p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Booking details</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div><span className="font-medium">Initiator:</span> {form.guest_name || "—"}</div>
+                      <div><span className="font-medium">Email:</span> {form.guest_email || "—"}</div>
+                      <div><span className="font-medium">Phone:</span> {form.guest_phone || "—"}</div>
+                      <div><span className="font-medium">Purpose:</span> {form.purpose}</div>
+                      {form.purpose === "Official" ? (
+                        <div><span className="font-medium">Justification:</span> {form.justification || "—"}</div>
+                      ) : null}
+                      <div><span className="font-medium">Meal plan:</span> {form.meal_plan}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Address</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div>{form.guest_address || "—"}</div>
+                      <div>
+                        {form.guest_city || "—"}, {form.guest_state || "—"} {form.guest_pincode || ""}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Stay details</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div><span className="font-medium">Arrival:</span> {form.arrival_date} at {form.arrival_time}</div>
+                      <div><span className="font-medium">Departure:</span> {form.departure_date} at {form.departure_time}</div>
+                      <div><span className="font-medium">Stay days:</span> {form.stay_days}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Guest summary</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div><span className="font-medium">Male:</span> {derivedCounts.male}</div>
+                      <div><span className="font-medium">Female:</span> {derivedCounts.female}</div>
+                      <div><span className="font-medium">Children:</span> {derivedCounts.children}</div>
+                      <div><span className="font-medium">Total guests:</span> {totalGuests}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Room & food</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div><span className="font-medium">Services:</span> {form.services_required.join(", ") || "—"}</div>
+                      {form.services_required.includes("Room") ? (
+                        <div>
+                          <span className="font-medium">Rooms:</span> {roomsRequired} selected
+                        </div>
+                      ) : null}
+                      {form.special_requests ? (
+                        <div><span className="font-medium">Special requests:</span> {form.special_requests}</div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-white p-4">
+                    <p className="text-sm font-semibold">Cost preview</p>
+                    <div className="grid gap-2 text-sm text-slate-700">
+                      <div><span className="font-medium">Estimated cost:</span> {estimatedCost !== null ? `INR ${estimatedCost.toLocaleString()}` : "Not estimated"}</div>
+                      <div className="text-xs text-muted-foreground">Use Estimate Total Cost before submit to confirm pricing.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex gap-2">
+              {!isFirstStep ? (
+                <Button type="button" variant="outline" onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 0))}>
+                  Back
+                </Button>
+              ) : null}
+            </div>
+            <div className="ml-auto flex gap-2">
+              {!isLastStep ? (
+                <Button
+                  type="button"
+                  disabled={!validateStep(currentStep)}
+                  onClick={() => setCurrentStep((prev) => Math.min(prev + 1, stepLabels.length - 1))}
+                  className="ml-auto disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Submitting..." : "Submit Booking"}
+                </Button>
+              )}
+            </div>
           </div>
+
+          {message ? <p className="text-sm font-medium text-emerald-600">{message}</p> : null}
+          {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+        </div>
         </form>
       </CardContent>
       {showFoodReservations ? (
