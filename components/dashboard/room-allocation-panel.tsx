@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PaginationBar, type PaginationMeta } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDisplayDate } from "@/lib/date";
@@ -27,9 +28,18 @@ type RoomAllocationWithBooking = RoomAllocationRecord & {
   approval_status: string;
 };
 
-export function RoomAllocationPanel() {
+export function RoomAllocationPanel({
+  embeddedBooking,
+  onChanged,
+}: {
+  embeddedBooking?: BookingWithOwner;
+  onChanged?: () => void;
+}) {
   const [bookings, setBookings] = useState<BookingWithOwner[]>([]);
   const [selected, setSelected] = useState<BookingWithOwner | null>(null);
+  const [bookingSearch, setBookingSearch] = useState("");
+  const [bookingsPage, setBookingsPage] = useState(1);
+  const [bookingsPagination, setBookingsPagination] = useState<PaginationMeta | null>(null);
   const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
   const [allocationFrom, setAllocationFrom] = useState("");
   const [allocationTo, setAllocationTo] = useState("");
@@ -40,11 +50,32 @@ export function RoomAllocationPanel() {
   const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [allocationNotice, setAllocationNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const services = useMemo(() => {
     if (!selected) return [];
     return parseServices(selected.services_required);
+  }, [selected]);
+
+  const roomPreferenceSummary = useMemo(() => {
+    if (!selected?.room_selection) return null;
+    try {
+      const parsed = JSON.parse(selected.room_selection) as {
+        "Double Bed"?: number;
+        "Triple Bed"?: number;
+        "Twin Sharing"?: number;
+      };
+      const entries = [
+        { label: "Double Bed", count: parsed["Double Bed"] ?? 0 },
+        { label: "Triple Bed", count: parsed["Triple Bed"] ?? 0 },
+        { label: "Twin Sharing", count: parsed["Twin Sharing"] ?? 0 },
+      ].filter((item) => item.count > 0);
+      if (entries.length === 0) return null;
+      return entries.map((item) => `${item.label} (${item.count})`).join(", ");
+    } catch {
+      return null;
+    }
   }, [selected]);
 
   const roomsByFloor = useMemo(() => {
@@ -61,15 +92,19 @@ export function RoomAllocationPanel() {
     return Array.from(map.entries());
   }, []);
 
-  const loadBookings = useCallback(async () => {
+  const loadBookings = useCallback(async (nextPage = bookingsPage, nextSearch = bookingSearch) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ approval_status: "APPROVED" });
+      params.set("page", String(nextPage));
+      if (nextSearch.trim()) params.set("q", nextSearch.trim());
       const res = await fetch(`/api/bookings?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch bookings");
       setBookings(data.bookings ?? []);
+      setBookingsPagination((data.pagination ?? null) as PaginationMeta | null);
+      setBookingsPage((data.pagination?.page as number | undefined) ?? nextPage);
       setSelected((previous) => {
         if (!previous) return previous;
         const nextSelected = (data.bookings ?? []).find((item: BookingWithOwner) => item.id === previous.id);
@@ -80,7 +115,7 @@ export function RoomAllocationPanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [bookingSearch, bookingsPage]);
 
   const loadAllocations = useCallback(async () => {
     if (!allocationFrom || !allocationTo) return;
@@ -91,6 +126,7 @@ export function RoomAllocationPanel() {
         from: allocationFrom,
         to: allocationTo,
       });
+      params.set("all", "1");
       const res = await fetch(`/api/room-allocations?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
@@ -106,11 +142,16 @@ export function RoomAllocationPanel() {
   }, [allocationFrom, allocationTo]);
 
   useEffect(() => {
+    if (embeddedBooking) {
+      setBookings([embeddedBooking]);
+      setSelected(embeddedBooking);
+      return;
+    }
     void loadBookings();
-  }, [loadBookings]);
+  }, [loadBookings, embeddedBooking]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || embeddedBooking) return;
     const params = new URLSearchParams(window.location.search);
     const booking = params.get("booking");
     const from = params.get("from");
@@ -120,16 +161,16 @@ export function RoomAllocationPanel() {
     if (booking && !Number.isNaN(Number(booking))) {
       setPendingBookingId(Number(booking));
     }
-  }, []);
+  }, [embeddedBooking]);
 
   useEffect(() => {
-    if (!pendingBookingId || bookings.length === 0) return;
+    if (embeddedBooking || !pendingBookingId || bookings.length === 0) return;
     const match = bookings.find((item) => item.id === pendingBookingId);
     if (match) {
       setSelected(match);
     }
     setPendingBookingId(null);
-  }, [bookings, pendingBookingId]);
+  }, [bookings, pendingBookingId, embeddedBooking]);
 
   useEffect(() => {
     if (!selected) return;
@@ -231,8 +272,14 @@ export function RoomAllocationPanel() {
       }
 
       setMessage(`Allocated rooms: ${selectedRooms.join(", ")}.`);
+      setAllocationNotice("Room allocated successfully");
+      setTimeout(() => setAllocationNotice(null), 2500);
       setSelectedRooms([]);
-      await loadBookings();
+      if (embeddedBooking) {
+        onChanged?.();
+      } else {
+        await loadBookings();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Room allocation failed");
     } finally {
@@ -263,6 +310,12 @@ export function RoomAllocationPanel() {
         throw new Error(`Failed to update estate status (${res.status}). ${data?.message || "Request failed"}${detail}`);
       }
       setMessage(status === "SERVICES_APPROVED" ? "Services approved." : "Booking rejected by estate manager.");
+      if (embeddedBooking) {
+        onChanged?.();
+        setSelected(null);
+        setBookings([]);
+        return;
+      }
       await loadBookings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update estate status");
@@ -277,78 +330,105 @@ export function RoomAllocationPanel() {
         <CardTitle>Room Allocation</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button variant="outline" onClick={loadBookings} disabled={loading}>
-          {loading ? "Refreshing..." : "Refresh"}
-        </Button>
+        {!embeddedBooking ? (
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1.5 md:w-[420px]">
+              <Label>Search</Label>
+              <Input
+                value={bookingSearch}
+                onChange={(e) => {
+                  setBookingsPage(1);
+                  setBookingSearch(e.target.value);
+                }}
+                placeholder="Search by booking id / name / phone / email / department"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => loadBookings(bookingsPage, bookingSearch)}
+              disabled={loading}
+            >
+              {loading ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
+        ) : null}
         {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Guest</TableHead>
-              <TableHead>Arrival</TableHead>
-              <TableHead>Booked On</TableHead>
-              <TableHead>Guests</TableHead>
-              <TableHead>Extras</TableHead>
-              <TableHead>Approval</TableHead>
-              <TableHead>Estate</TableHead>
-              <TableHead>Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bookings.map((booking) => (
-              <TableRow key={booking.id}>
-                <TableCell>#{booking.id}</TableCell>
-                <TableCell>{booking.guest_name}</TableCell>
-                <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
-                <TableCell>
-                  <div>{formatDisplayDate(booking.created_at)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                </TableCell>
-                <TableCell>{booking.total_guests}</TableCell>
-                <TableCell>
-                  {booking.extra_bed ? (
-                    <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <ApprovalBadge status={booking.approval_status} />
-                </TableCell>
-                <TableCell>
-                  <EstateBadge status={booking.estate_status} />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant={selected?.id === booking.id ? "destructive" : "outline"}
-                    size="sm"
-                    onClick={() =>
-                      setSelected((prev) => (prev?.id === booking.id ? null : booking))
-                    }
-                  >
-                    {selected?.id === booking.id ? (
-                      <X className="h-4 w-4" />
-                    ) : (
-                      "Open"
-                    )}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {!embeddedBooking ? (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Booking Initiator</TableHead>
+                  <TableHead>Arrival</TableHead>
+                  <TableHead>Booked On</TableHead>
+                  <TableHead>Guests</TableHead>
+                  <TableHead>Extras</TableHead>
+                  <TableHead>Approval</TableHead>
+                  <TableHead>Estate</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bookings.map((booking) => (
+                  <TableRow key={booking.id}>
+                    <TableCell>#{booking.id}</TableCell>
+                    <TableCell>{booking.guest_name}</TableCell>
+                    <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
+                    <TableCell>
+                      <div>{formatDisplayDate(booking.created_at)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.total_guests}</TableCell>
+                    <TableCell>
+                      {booking.extra_bed ? (
+                        <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <ApprovalBadge status={booking.approval_status} />
+                    </TableCell>
+                    <TableCell>
+                      <EstateBadge status={booking.estate_status} />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant={selected?.id === booking.id ? "destructive" : "outline"}
+                        size="sm"
+                        onClick={() =>
+                          setSelected((prev) => (prev?.id === booking.id ? null : booking))
+                        }
+                      >
+                        {selected?.id === booking.id ? <X className="h-4 w-4" /> : "Open"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <PaginationBar
+              pagination={bookingsPagination}
+              loading={loading}
+              onPageChange={(next) => {
+                setBookingsPage(next);
+              }}
+            />
+          </>
+        ) : null}
 
         {selected ? (
           <div className="space-y-4 rounded-lg border bg-secondary/20 p-4">
             <h3 className="font-semibold">Booking #{selected.id}</h3>
             <div className="grid gap-2 text-sm md:grid-cols-2">
               <p>
-                <span className="font-medium">Guest:</span> {selected.guest_name}
+                <span className="font-medium">Booking Initiator:</span> {selected.guest_name}
               </p>
               <p>
                 <span className="font-medium">Phone:</span> {selected.guest_phone}
@@ -360,11 +440,15 @@ export function RoomAllocationPanel() {
                 <span className="font-medium">Stay:</span> {selected.stay_days} day(s)
               </p>
               <p>
-                <span className="font-medium">Counts:</span> M {selected.male_count}, F {selected.female_count}, C{" "}
+                <span className="font-medium">Counts:</span> Male - {selected.male_count}, Female - {selected.female_count}, Child -{" "}
                 {selected.children_count}
               </p>
               <p>
                 <span className="font-medium">Rooms Required:</span> {selected.rooms_required}
+              </p>
+              <p>
+                <span className="font-medium">Room Preference:</span>{" "}
+                {roomPreferenceSummary || selected.room_configuration || "Not specified"}
               </p>
               <p>
                 <span className="font-medium">Extra Bed:</span>{" "}
@@ -372,9 +456,6 @@ export function RoomAllocationPanel() {
               </p>
               <p className="md:col-span-2">
                 <span className="font-medium">Services:</span> {services.join(", ") || "None"}
-              </p>
-              <p className="md:col-span-2">
-                <span className="font-medium">Justification:</span> {selected.justification}
               </p>
               <p className="md:col-span-2">
                 <span className="font-medium">Special Requests:</span>{" "}
@@ -391,21 +472,23 @@ export function RoomAllocationPanel() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const params = new URLSearchParams();
-                      if (selected) params.set("booking", String(selected.id));
-                      if (allocationFrom) params.set("from", allocationFrom);
-                      if (allocationTo) params.set("to", allocationTo);
-                      const query = params.toString();
-                      const url = `/dashboard/room-allocation${query ? `?${query}` : ""}#room-allocation`;
-                      window.open(url, "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    Open In New Window
-                  </Button>
+                  {!embeddedBooking ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        if (selected) params.set("booking", String(selected.id));
+                        if (allocationFrom) params.set("from", allocationFrom);
+                        if (allocationTo) params.set("to", allocationTo);
+                        const query = params.toString();
+                        const url = `/dashboard/room-allocation${query ? `?${query}` : ""}#room-allocation`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      Open In New Window
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
                     size="sm"
@@ -416,6 +499,11 @@ export function RoomAllocationPanel() {
                   </Button>
                 </div>
               </div>
+              {allocationNotice ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                  {allocationNotice}
+                </div>
+              ) : null}
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1.5">
@@ -543,7 +631,7 @@ export function RoomAllocationPanel() {
             ) : null}
 
             <div className="space-y-1.5">
-              <Label>Rejection Remarks</Label>
+              <Label>Rejection / Cancellation Remarks</Label>
               <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} />
             </div>
 

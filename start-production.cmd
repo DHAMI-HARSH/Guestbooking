@@ -14,4 +14,4 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call npm run start -- -H 0.0.0.0 -p 3000
+call npm run start -- -H 0.0.0.0

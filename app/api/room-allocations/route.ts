@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 import { requireRoles } from "@/lib/permissions";
+import { parsePagination, toPaginationMeta } from "@/lib/pagination";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,8 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const bookingId = searchParams.get("booking_id");
+  const fetchAll = searchParams.get("all") === "1";
+  const { page, limit, offset } = parsePagination(searchParams);
 
   if (!bookingId && (!from || !to)) {
     return NextResponse.json(
@@ -42,6 +45,8 @@ export async function GET(request: NextRequest) {
   try {
     const pool = await getDbPool();
     const req = pool.request();
+    req.input("offset", offset);
+    req.input("limit", limit);
 
     if (bookingId) {
       const bookingIdNum = Number(bookingId);
@@ -80,11 +85,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ allocations: result.recordset });
     }
 
-    const result = await pool
-      .request()
-      .input("from", from)
-      .input("to", to)
-      .query(`
+    req.input("from", from);
+    req.input("to", to);
+
+    if (fetchAll) {
+      const result = await req.query(`
         SELECT
           ra.*,
           b.arrival_date,
@@ -97,10 +102,45 @@ export async function GET(request: NextRequest) {
         WHERE ra.allocation_status = 'ALLOCATED'
           AND b.arrival_date <= @to
           AND b.departure_date >= @from
-        ORDER BY ra.room_number ASC
+        ORDER BY ra.room_number ASC, ra.id DESC
       `);
 
-    return NextResponse.json({ allocations: result.recordset });
+      return NextResponse.json({ allocations: result.recordset });
+    }
+
+    const countResult = await req.query(`
+      SELECT COUNT(*) AS total
+      FROM RoomAllocation ra
+      INNER JOIN Bookings b ON b.id = ra.booking_id
+      WHERE ra.allocation_status = 'ALLOCATED'
+        AND b.arrival_date <= @to
+        AND b.departure_date >= @from
+    `);
+
+    const total = Number((countResult.recordset[0] as { total?: unknown } | undefined)?.total ?? 0);
+
+    const result = await req.query(`
+      SELECT
+        ra.*,
+        b.arrival_date,
+        b.departure_date,
+        b.guest_name,
+        b.estate_status,
+        b.approval_status
+      FROM RoomAllocation ra
+      INNER JOIN Bookings b ON b.id = ra.booking_id
+      WHERE ra.allocation_status = 'ALLOCATED'
+        AND b.arrival_date <= @to
+        AND b.departure_date >= @from
+      ORDER BY ra.room_number ASC, ra.id DESC
+      OFFSET @offset ROWS
+      FETCH NEXT @limit ROWS ONLY
+    `);
+
+    return NextResponse.json({
+      allocations: result.recordset,
+      pagination: toPaginationMeta({ page, limit, total }),
+    });
   } catch (error) {
     return NextResponse.json(
       { message: "Failed to fetch room allocations", detail: error instanceof Error ? error.message : "Unknown error" },

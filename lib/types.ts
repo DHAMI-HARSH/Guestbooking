@@ -33,8 +33,10 @@ export interface BookingRecord {
   guest_city: string;
   guest_state: string;
   room_configuration: string | null;
+  room_selection: string | null;
   meal_plan: "General" | "Special";
   guests: string | null;
+  food_reservations: string | null;
   estimated_cost: number | null;
   extra_bed: boolean;
   purpose: "Official" | "Personal";

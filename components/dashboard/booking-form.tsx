@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { addDays, differenceInCalendarDays, format } from "date-fns";
+import { addDays, addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +42,25 @@ interface BookingFormProps {
   onCreated?: () => void;
 }
 
+type GuestEntry = {
+  id: string;
+  name: string;
+  gender: "Male" | "Female" | "Child";
+  age: string;
+  arrival_date: string;
+  arrival_time: string;
+  departure_date: string;
+  departure_time: string;
+};
+
+type FoodReservationEntry = {
+  id: string;
+  date: string;
+  meal_type: "Breakfast" | "Lunch" | "Dinner";
+  head_count: string;
+  notes: string;
+};
+
 interface BookingState {
   guest_name: string;
   guest_email: string;
@@ -51,14 +70,15 @@ interface BookingState {
   guest_city: string;
   guest_state: string;
   room_configuration: "Double Bed" | "Triple Bed" | "Twin Sharing" | "";
+  room_selection: {
+    "Double Bed": number;
+    "Triple Bed": number;
+    "Twin Sharing": number;
+  };
   meal_plan: "General" | "Special";
   extra_bed: boolean;
-  guests: Array<{
-    id: string;
-    name: string;
-    gender: "Male" | "Female" | "Child";
-    age: string;
-  }>;
+  guests: GuestEntry[];
+  food_reservations: FoodReservationEntry[];
   purpose: "Official" | "Personal";
   justification: string;
   special_requests: string;
@@ -83,9 +103,15 @@ const initialState: BookingState = {
   guest_city: "",
   guest_state: "",
   room_configuration: "",
+  room_selection: {
+    "Double Bed": 0,
+    "Triple Bed": 0,
+    "Twin Sharing": 0,
+  },
   meal_plan: "General",
   extra_bed: false,
   guests: [],
+  food_reservations: [],
   purpose: "Official",
   justification: "",
   special_requests: "",
@@ -111,6 +137,27 @@ export function BookingForm({ onCreated }: BookingFormProps) {
   const [pincodeStatus, setPincodeStatus] = useState<string | null>(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [showSpecialRequests, setShowSpecialRequests] = useState(false);
+  const [showFoodReservations, setShowFoodReservations] = useState(false);
+  const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+  const maxArrivalStr = useMemo(() => format(addMonths(new Date(), 1), "yyyy-MM-dd"), []);
+  const selectedMealServices = useMemo(
+    () =>
+      form.services_required.filter((service): service is "Breakfast" | "Lunch" | "Dinner" =>
+        ["Breakfast", "Lunch", "Dinner"].includes(service)
+      ),
+    [form.services_required],
+  );
+  const bookingDateOptions = useMemo(() => {
+    const dates: string[] = [];
+    const start = parseLocalDate(form.arrival_date);
+    const end = parseLocalDate(form.departure_date);
+    let cursor = start;
+    while (cursor <= end) {
+      dates.push(format(cursor, "yyyy-MM-dd"));
+      cursor = addDays(cursor, 1);
+    }
+    return dates;
+  }, [form.arrival_date, form.departure_date]);
 
   const derivedCounts = useMemo(() => {
     if (form.guests.length === 0) {
@@ -123,6 +170,12 @@ export function BookingForm({ onCreated }: BookingFormProps) {
 
     return form.guests.reduce(
       (acc, guest) => {
+        const ageValue = Number(guest.age || 0);
+        const isChild = Number.isFinite(ageValue) && ageValue > 0 && ageValue < 10;
+        if (isChild) {
+          acc.children += 1;
+          return acc;
+        }
         if (guest.gender === "Male") acc.male += 1;
         if (guest.gender === "Female") acc.female += 1;
         if (guest.gender === "Child") acc.children += 1;
@@ -140,8 +193,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     () => derivedCounts.male + derivedCounts.female,
     [derivedCounts],
   );
-  const hasChildren = derivedCounts.children > 0;
-  const roomsRequired = useMemo(() => {
+  const suggestedRoomsRequired = useMemo(() => {
     if (!form.services_required.includes("Room")) return 0;
     const capacity =
       form.room_configuration === "Triple Bed"
@@ -152,11 +204,22 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     return Math.max(1, Math.ceil(adultGuests / capacity));
   }, [form.services_required, form.room_configuration, adultGuests]);
 
-  useEffect(() => {
-    if (!hasChildren && form.extra_bed) {
-      setForm((prev) => ({ ...prev, extra_bed: false }));
-    }
-  }, [hasChildren, form.extra_bed]);
+  const roomsRequired = useMemo(() => {
+    return (
+      form.room_selection["Double Bed"] +
+      form.room_selection["Triple Bed"] +
+      form.room_selection["Twin Sharing"]
+    );
+  }, [form.room_selection]);
+
+  const totalFoodCoverCount = useMemo(
+    () =>
+      form.food_reservations.reduce((sum, reservation) => {
+        const count = Number(reservation.head_count || 0);
+        return sum + (Number.isFinite(count) ? count : 0);
+      }, 0),
+    [form.food_reservations],
+  );
 
   useEffect(() => {
     const pincode = form.guest_pincode.trim();
@@ -218,14 +281,23 @@ export function BookingForm({ onCreated }: BookingFormProps) {
       ...prev,
       guests: [
         ...prev.guests,
-        { id, name: "", gender: "Male", age: "" },
+        {
+          id,
+          name: "",
+          gender: "Male",
+          age: "",
+          arrival_date: prev.arrival_date,
+          arrival_time: prev.arrival_time,
+          departure_date: prev.departure_date,
+          departure_time: prev.departure_time,
+        },
       ],
     }));
   }
 
   function handleGuestChange(
     id: string,
-    key: "name" | "gender" | "age",
+    key: keyof Omit<GuestEntry, "id">,
     value: string,
   ) {
     setForm((prev) => ({
@@ -240,6 +312,15 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                     age:
                       value === "Child" && Number(guest.age || 0) > 10 ? "10" : guest.age,
                   }
+                : key === "arrival_date"
+                  ? {
+                      arrival_date: value,
+                      departure_date: guest.departure_date < value ? value : guest.departure_date,
+                    }
+                  : key === "departure_date"
+                    ? {
+                        departure_date: value < guest.arrival_date ? guest.arrival_date : value,
+                      }
                 : key === "age" && guest.gender === "Child"
                   ? { age: String(Math.min(10, Number(value || 0))) }
                   : { [key]: value }),
@@ -258,18 +339,18 @@ export function BookingForm({ onCreated }: BookingFormProps) {
 
   function estimateCost() {
     const stayDays = Math.max(1, Number(form.stay_days) || 1);
-    const roomRate =
-      roomConfigurations.find((room) => room.label === form.room_configuration)?.rate ?? 0;
     const roomCost = form.services_required.includes("Room")
-      ? roomRate * roomsRequired * stayDays
+      ? roomConfigurations.reduce((sum, room) => {
+          const count = form.room_selection[room.label];
+          return sum + room.rate * count * stayDays;
+        }, 0)
       : 0;
 
     const mealPlanRates = mealRates[form.meal_plan];
-    const mealCost = form.services_required.reduce((sum, service) => {
-      if (service === "Breakfast" || service === "Lunch" || service === "Dinner") {
-        return sum + mealPlanRates[service] * totalGuests * stayDays;
-      }
-      return sum;
+    const mealCost = form.food_reservations.reduce((sum, reservation) => {
+      const count = Number(reservation.head_count || 0);
+      if (!reservation.meal_type || !Number.isFinite(count) || count <= 0) return sum;
+      return sum + mealPlanRates[reservation.meal_type] * count;
     }, 0);
 
     setEstimatedCost(roomCost + mealCost);
@@ -282,15 +363,91 @@ export function BookingForm({ onCreated }: BookingFormProps) {
       ...prev,
       stay_days: safeDays,
       departure_date: format(departure, "yyyy-MM-dd"),
+      guests: prev.guests.map((guest) => ({
+        ...guest,
+        arrival_date: guest.arrival_date < prev.arrival_date ? prev.arrival_date : guest.arrival_date,
+        departure_date:
+          guest.departure_date > format(departure, "yyyy-MM-dd")
+            ? format(departure, "yyyy-MM-dd")
+            : guest.departure_date,
+      })),
+      food_reservations: prev.food_reservations.filter((reservation) => {
+        const nextDeparture = format(departure, "yyyy-MM-dd");
+        return reservation.date >= prev.arrival_date && reservation.date <= nextDeparture;
+      }),
     }));
   }
 
   function handleServiceToggle(service: string, checked: boolean) {
+    setForm((prev) => {
+      const nextServices = checked
+        ? [...prev.services_required, service]
+        : prev.services_required.filter((item) => item !== service);
+      return {
+        ...prev,
+        services_required: nextServices,
+        food_reservations: ["Breakfast", "Lunch", "Dinner"].includes(service) && !checked
+          ? prev.food_reservations.filter((item) => item.meal_type !== service)
+          : prev.food_reservations,
+        room_selection: nextServices.includes("Room")
+          ? prev.room_selection
+          : {
+              "Double Bed": 0,
+              "Triple Bed": 0,
+              "Twin Sharing": 0,
+            },
+      };
+    });
+  }
+
+  function handleAddFoodReservation() {
+    const id = `${Date.now()}-${Math.round(Math.random() * 10000)}`;
+    const defaultMeal = selectedMealServices[0] ?? "Breakfast";
     setForm((prev) => ({
       ...prev,
-      services_required: checked
-        ? [...prev.services_required, service]
-        : prev.services_required.filter((item) => item !== service),
+      services_required: prev.services_required.includes(defaultMeal)
+        ? prev.services_required
+        : [...prev.services_required, defaultMeal],
+      food_reservations: [
+        ...prev.food_reservations,
+        {
+          id,
+          date: bookingDateOptions[0] ?? prev.arrival_date,
+          meal_type: defaultMeal,
+          head_count: String(totalGuests || 1),
+          notes: "",
+        },
+      ],
+    }));
+    clearFieldError("food_reservations");
+  }
+
+  function handleFoodReservationChange(
+    id: string,
+    key: keyof Omit<FoodReservationEntry, "id">,
+    value: string,
+  ) {
+    setForm((prev) => ({
+      ...prev,
+      food_reservations: prev.food_reservations.map((reservation) =>
+        reservation.id === id
+          ? {
+              ...reservation,
+              [key]: value,
+            }
+          : reservation,
+      ),
+      services_required:
+        key === "meal_type" && !prev.services_required.includes(value)
+          ? [...prev.services_required, value]
+          : prev.services_required,
+    }));
+  }
+
+  function handleRemoveFoodReservation(id: string) {
+    setForm((prev) => ({
+      ...prev,
+      food_reservations: prev.food_reservations.filter((reservation) => reservation.id !== id),
     }));
   }
 
@@ -304,9 +461,23 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     try {
       const payload = {
         ...form,
+        guests: form.guests.map((guest) => {
+          const { id, ...rest } = guest;
+          void id;
+          return rest;
+        }),
+        food_reservations: form.food_reservations.map((reservation) => {
+          const { id, ...rest } = reservation;
+          void id;
+          return {
+            ...rest,
+            head_count: Number(rest.head_count),
+          };
+        }),
         male_count: derivedCounts.male,
         female_count: derivedCounts.female,
         children_count: derivedCounts.children,
+        rooms_required: roomsRequired,
         estimated_cost: estimatedCost,
       };
 
@@ -351,7 +522,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Booking Person Name</Label>
+            <Label>Booking Initiator</Label>
             <Input
               value={form.guest_name}
               onChange={(e) => {
@@ -363,7 +534,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             {fieldErrors.guest_name ? <p className="text-xs text-red-600">{fieldErrors.guest_name}</p> : null}
           </div>
           <div className="space-y-1.5">
-            <Label>Booking Person Email</Label>
+            <Label>Booking Initiator Email</Label>
             <Input
               type="email"
               value={form.guest_email}
@@ -379,8 +550,8 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             <Label>Guest Mobile No</Label>
             <Input
               type="tel"
-              minLength={8}
-              placeholder="Enter at least 8 digits"
+              minLength={10}
+              placeholder="Enter at least 10 digits"
               value={form.guest_phone}
               onChange={(e) => {
                 clearFieldError("guest_phone");
@@ -391,8 +562,9 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             {fieldErrors.guest_phone ? <p className="text-xs text-red-600">{fieldErrors.guest_phone}</p> : null}
           </div>
           <div className="space-y-1.5 md:col-span-2">
-            <Label>Guest Address</Label>
+            <Label>Guest Address (min 10 characters)</Label>
             <Input
+              minLength={10}
               value={form.guest_address}
               onChange={(e) => {
                 clearFieldError("guest_address");
@@ -408,31 +580,6 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               </span>
             </div>
           </div>
-          <div className="md:col-span-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowSpecialRequests((prev) => !prev)}
-            >
-              Special Requests
-            </Button>
-            {showSpecialRequests ? (
-              <div className="mt-2 space-y-1.5">
-                <Label>Special Requests</Label>
-                <Textarea
-                  value={form.special_requests}
-                  onChange={(e) => {
-                    clearFieldError("special_requests");
-                    setForm((prev) => ({ ...prev, special_requests: e.target.value }));
-                  }}
-                />
-                {fieldErrors.special_requests ? (
-                  <p className="text-xs text-red-600">{fieldErrors.special_requests}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
           <div className="space-y-1.5">
             <Label>Pincode</Label>
             <Input
@@ -476,33 +623,6 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               required
             />
             {fieldErrors.guest_state ? <p className="text-xs text-red-600">{fieldErrors.guest_state}</p> : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Room Configuration</Label>
-            <Select
-              value={form.room_configuration}
-              onValueChange={(value: BookingState["room_configuration"]) =>
-                setForm((prev) => {
-                  clearFieldError("room_configuration");
-                  return { ...prev, room_configuration: value };
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select configuration" />
-              </SelectTrigger>
-              <SelectContent>
-                {roomConfigurations.map((room) => (
-                  <SelectItem key={room.label} value={room.label}>
-                    {room.label} (INR {room.rate}/night)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {fieldErrors.room_configuration ? (
-              <p className="text-xs text-red-600">{fieldErrors.room_configuration}</p>
-            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -571,18 +691,35 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             <Input
               type="date"
               value={form.arrival_date}
+              min={todayStr}
+              max={maxArrivalStr}
               onChange={(e) => {
                 clearFieldError("arrival_date");
-                const arrivalDate = e.target.value;
+                let arrivalDate = e.target.value;
                 if (!arrivalDate) {
                   setForm((prev) => ({ ...prev, arrival_date: arrivalDate }));
                   return;
                 }
+                if (arrivalDate < todayStr) {
+                  arrivalDate = todayStr;
+                }
+                if (arrivalDate > maxArrivalStr) {
+                  arrivalDate = maxArrivalStr;
+                }
                 const departure = addDays(parseLocalDate(arrivalDate), form.stay_days);
+                const nextDeparture = format(departure, "yyyy-MM-dd");
                 setForm((prev) => ({
                   ...prev,
                   arrival_date: arrivalDate,
-                  departure_date: format(departure, "yyyy-MM-dd"),
+                  departure_date: nextDeparture,
+                  guests: prev.guests.map((guest) => ({
+                    ...guest,
+                    arrival_date: guest.arrival_date < arrivalDate ? arrivalDate : guest.arrival_date,
+                    departure_date: guest.departure_date > nextDeparture ? nextDeparture : guest.departure_date,
+                  })),
+                  food_reservations: prev.food_reservations.filter(
+                    (reservation) => reservation.date >= arrivalDate && reservation.date <= nextDeparture
+                  ),
                 }));
               }}
               required
@@ -617,26 +754,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             <Input
               type="date"
               value={form.departure_date}
-              onChange={(e) => {
-                clearFieldError("departure_date");
-                const value = e.target.value;
-                if (!value) {
-                  setForm((prev) => ({ ...prev, departure_date: value }));
-                  return;
-                }
-                const stayDays = Math.max(
-                  1,
-                  differenceInCalendarDays(
-                    parseLocalDate(value),
-                    parseLocalDate(form.arrival_date)
-                  )
-                );
-                setForm((prev) => ({
-                  ...prev,
-                  departure_date: value,
-                  stay_days: stayDays,
-                }));
-              }}
+              disabled
               required
             />
             {fieldErrors.departure_date ? <p className="text-xs text-red-600">{fieldErrors.departure_date}</p> : null}
@@ -650,30 +768,6 @@ export function BookingForm({ onCreated }: BookingFormProps) {
               required
             />
           </div>
-
-          <div className="rounded-md border bg-secondary/40 p-3 md:col-span-2">
-            <p className="text-sm font-semibold">Total Guests: {totalGuests}</p>
-            <p className="text-sm text-muted-foreground">Rooms Required: {roomsRequired}</p>
-            {form.extra_bed ? (
-              <p className="text-xs font-medium text-emerald-700">Extra bed added (free of cost)</p>
-            ) : null}
-            {form.guests.length > 0 ? (
-              <p className="text-xs text-muted-foreground">Guest counts are auto-calculated from the guest list.</p>
-            ) : null}
-          </div>
-
-          {hasChildren ? (
-            <div className="flex items-center gap-3 md:col-span-2">
-              <Button
-                type="button"
-                variant={form.extra_bed ? "secondary" : "outline"}
-                onClick={() => setForm((prev) => ({ ...prev, extra_bed: !prev.extra_bed }))}
-              >
-                {form.extra_bed ? "Remove Extra Bed" : "Add Extra Bed (Free)"}
-              </Button>
-              <p className="text-xs text-muted-foreground">Available only when children are included.</p>
-            </div>
-          ) : null}
 
           <div className="space-y-2 md:col-span-2">
             <div className="flex items-center justify-between">
@@ -727,6 +821,46 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                         <p className="text-xs text-muted-foreground">Child age must be 10 or below.</p>
                       ) : null}
                     </div>
+                    <div className="space-y-1.5">
+                      <Label>Guest Arrival Date</Label>
+                      <Input
+                        type="date"
+                        min={form.arrival_date}
+                        max={form.departure_date}
+                        value={guest.arrival_date}
+                        onChange={(e) => handleGuestChange(guest.id, "arrival_date", e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Guest Arrival Time</Label>
+                      <Input
+                        type="time"
+                        value={splitTime(guest.arrival_time).time}
+                        onChange={(e) => handleGuestChange(guest.id, "arrival_time", buildTime(e.target.value))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Guest Departure Date</Label>
+                      <Input
+                        type="date"
+                        min={guest.arrival_date || form.arrival_date}
+                        max={form.departure_date}
+                        value={guest.departure_date}
+                        onChange={(e) => handleGuestChange(guest.id, "departure_date", e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Guest Departure Time</Label>
+                      <Input
+                        type="time"
+                        value={splitTime(guest.departure_time).time}
+                        onChange={(e) => handleGuestChange(guest.id, "departure_time", buildTime(e.target.value))}
+                        required
+                      />
+                    </div>
                     <div className="md:col-span-4">
                       <Button type="button" variant="ghost" onClick={() => handleRemoveGuest(guest.id)}>
                         Remove Guest
@@ -771,8 +905,31 @@ export function BookingForm({ onCreated }: BookingFormProps) {
             Counts are auto-calculated from the guest list. Children age must be less than 10.
           </p>
 
+          <div className="rounded-md border bg-secondary/40 p-3 md:col-span-2">
+            <p className="text-sm font-semibold">Total Guests: {totalGuests}</p>
+            <p className="text-sm text-muted-foreground">
+              Rooms Required: {roomsRequired}{" "}
+              <span className="text-xs text-muted-foreground">
+                (Suggested: {suggestedRoomsRequired})
+              </span>
+            </p>
+            {form.guests.length > 0 ? (
+              <p className="text-xs text-muted-foreground">Guest counts are auto-calculated from the guest list.</p>
+            ) : null}
+          </div>
+
           <div className="space-y-2 md:col-span-2">
-            <Label>Services Required</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Services Required</Label>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100"
+                onClick={() => setShowFoodReservations(true)}
+              >
+                Arrange Food
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {serviceOptions.map((service) => {
                 const checked = form.services_required.includes(service);
@@ -784,7 +941,99 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                 );
               })}
             </div>
+            <div className="rounded-md border bg-sky-50/50 p-3 text-sm">
+              <p className="font-medium">
+                Food reservations: {form.food_reservations.length} row(s), {totalFoodCoverCount} total covers
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Use Arrange Food to set exact meal counts by date. This also works for non-staying guests.
+              </p>
+            </div>
+            {fieldErrors.food_reservations ? (
+              <p className="text-xs text-red-600">{fieldErrors.food_reservations}</p>
+            ) : null}
           </div>
+
+          {form.services_required.includes("Room") ? (
+            <div className="space-y-2 md:col-span-2">
+              <Label>Room Selection</Label>
+              <div className="space-y-2">
+                {roomConfigurations.map((room) => {
+                  return (
+                    <div
+                      key={room.label}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white p-3"
+                    >
+                      <div className="text-left">
+                        <div className="text-sm font-medium">Room – {room.label}</div>
+                        <div className="text-xs text-muted-foreground">INR {room.rate}/night</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Required number</span>
+                        <Select
+                          value={String(form.room_selection[room.label])}
+                          onValueChange={(value) => {
+                            const parsed = Number(value);
+                            clearFieldError("rooms_required");
+                            setForm((prev) => ({
+                              ...prev,
+                              room_selection: {
+                                ...prev.room_selection,
+                                [room.label]: Number.isFinite(parsed) ? parsed : prev.room_selection[room.label],
+                              },
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">0 Rooms</SelectItem>
+                            {[1, 2, 3].map((count) => (
+                              <SelectItem key={count} value={String(count)}>
+                                {count} {count === 1 ? "Room" : "Rooms"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {fieldErrors.rooms_required ? (
+                <p className="text-xs text-red-600">{fieldErrors.rooms_required}</p>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Suggested based on guest list: {suggestedRoomsRequired} room(s).
+                </p>
+                <Button
+                  type="button"
+                  variant={showSpecialRequests ? "secondary" : "outline"}
+                  className="border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                  onClick={() => setShowSpecialRequests((prev) => !prev)}
+                >
+                  Special Requests
+                </Button>
+              </div>
+              {showSpecialRequests ? (
+                <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-3">
+                  <Label>Special Requests</Label>
+                  <Textarea
+                    value={form.special_requests}
+                    onChange={(e) => {
+                      clearFieldError("special_requests");
+                      setForm((prev) => ({ ...prev, special_requests: e.target.value }));
+                    }}
+                  />
+                  {fieldErrors.special_requests ? (
+                    <p className="text-xs text-red-600">{fieldErrors.special_requests}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3 md:col-span-2">
             <Button type="button" variant="secondary" onClick={estimateCost}>
@@ -809,6 +1058,134 @@ export function BookingForm({ onCreated }: BookingFormProps) {
           </div>
         </form>
       </CardContent>
+      {showFoodReservations ? (
+        <div className="gh-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="gh-scale-in w-full max-w-5xl rounded-lg border bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div>
+                <p className="font-semibold">Food Reservation Planner</p>
+                <p className="text-xs text-muted-foreground">
+                  Reserve meals by date and headcount, even when no room stay is needed.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setShowFoodReservations(false)}>
+                Close
+              </Button>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Booking window: {form.arrival_date} {form.arrival_time} to {form.departure_date} {form.departure_time}
+                </p>
+                <Button type="button" onClick={handleAddFoodReservation}>
+                  Add Food Row
+                </Button>
+              </div>
+              {form.food_reservations.length === 0 ? (
+                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                  No food rows added yet. Add rows for the exact dates and meal headcounts you need.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {form.food_reservations.map((reservation) => (
+                    <div
+                      key={reservation.id}
+                      className="grid gap-3 rounded-lg border bg-slate-50 p-3 md:grid-cols-[1.2fr_1fr_1fr_1.8fr_auto]"
+                    >
+                      <div className="space-y-1.5">
+                        <Label>Date</Label>
+                        <Select
+                          value={reservation.date}
+                          onValueChange={(value) => handleFoodReservationChange(reservation.id, "date", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select date" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {bookingDateOptions.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Meal</Label>
+                        <Select
+                          value={reservation.meal_type}
+                          onValueChange={(value: "Breakfast" | "Lunch" | "Dinner") =>
+                            handleFoodReservationChange(reservation.id, "meal_type", value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select meal" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(["Breakfast", "Lunch", "Dinner"] as const).map((meal) => (
+                              <SelectItem key={meal} value={meal}>
+                                {meal}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>People</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={reservation.head_count}
+                          onChange={(e) => handleFoodReservationChange(reservation.id, "head_count", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Notes</Label>
+                        <Input
+                          value={reservation.notes}
+                          placeholder="VIP lunch / external guests / etc."
+                          onChange={(e) => handleFoodReservationChange(reservation.id, "notes", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="button" variant="ghost" onClick={() => handleRemoveFoodReservation(reservation.id)}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="rounded-md border bg-secondary/30 p-3">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Meal Plan</Label>
+                    <Select
+                      value={form.meal_plan}
+                      onValueChange={(value: BookingState["meal_plan"]) => {
+                        clearFieldError("meal_plan");
+                        setForm((prev) => ({ ...prev, meal_plan: value }));
+                      }}
+                    >
+                      <SelectTrigger className="min-w-44">
+                        <SelectValue placeholder="Select plan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="General">General</SelectItem>
+                        <SelectItem value="Special">Special</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Breakfast INR {mealRates[form.meal_plan].Breakfast}, Lunch INR {mealRates[form.meal_plan].Lunch},
+                    Dinner INR {mealRates[form.meal_plan].Dinner}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }

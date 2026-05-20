@@ -35,3 +35,65 @@ body {
     radial-gradient(circle at 90% 20%, rgba(22, 163, 74, 0.08), transparent 35%);
   min-height: 100vh;
 }
+
+@layer utilities {
+  @media (prefers-reduced-motion: no-preference) {
+    .gh-soft {
+      transition-property: transform, box-shadow, background-color, border-color, color, opacity;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+      will-change: transform;
+    }
+
+    .gh-fade-in {
+      animation: ghFadeIn 220ms ease-out both;
+    }
+
+    .gh-scale-in {
+      animation: ghScaleIn 220ms ease-out both;
+    }
+
+    .gh-slide-up {
+      animation: ghSlideUp 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gh-fade-in,
+    .gh-scale-in,
+    .gh-slide-up {
+      animation: none !important;
+    }
+  }
+}
+
+@keyframes ghFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ghScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ghSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

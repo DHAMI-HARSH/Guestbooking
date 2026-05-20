@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchReportData, type ReportType } from "@/lib/reports";
+import { fetchReportPage } from "@/lib/reports";
 import { requireRoles } from "@/lib/permissions";
+import { parsePagination, toPaginationMeta } from "@/lib/pagination";
 
 export const runtime = "nodejs";
 
 const reportRoles = ["APPROVER", "ESTATE_PRIMARY"] as const;
-
-function parseType(raw: string | null): ReportType | null {
-  if (raw === "monthly" || raw === "guest-history" || raw === "room-usage") {
-    return raw;
-  }
-  return null;
-}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRoles(request, [...reportRoles]);
@@ -20,16 +14,31 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const type = parseType(searchParams.get("type"));
-  const month = searchParams.get("month") ?? undefined;
+  const startDate = searchParams.get("start_date");
+  const endDate = searchParams.get("end_date");
+  const query = searchParams.get("q");
+  const { page, limit } = parsePagination(searchParams);
 
-  if (!type) {
-    return NextResponse.json({ message: "Invalid report type" }, { status: 400 });
+  if (!startDate || !endDate) {
+    return NextResponse.json({ message: "Start and end dates are required" }, { status: 400 });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    return NextResponse.json({ message: "Dates must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+  if (startDate > endDate) {
+    return NextResponse.json({ message: "Start date must be on or before end date" }, { status: 400 });
   }
 
   try {
-    const data = await fetchReportData(type, month);
-    return NextResponse.json({ type, data });
+    const { rows, total } = await fetchReportPage(startDate, endDate, {
+      page,
+      limit,
+      q: query,
+    });
+    return NextResponse.json({
+      data: rows,
+      pagination: toPaginationMeta({ page, limit, total }),
+    });
   } catch (error) {
     return NextResponse.json(
       { message: "Failed to generate report", detail: error instanceof Error ? error.message : "Unknown error" },

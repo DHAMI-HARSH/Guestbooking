@@ -239,6 +239,8 @@ export async function PUT(
           | ""
           | null) ??
         "",
+      rooms_required: parsed.data.rooms_required,
+      room_selection: parsed.data.room_selection,
     });
 
     /* ---- keep stay_days and departure_date in sync ---- */
@@ -275,8 +277,12 @@ export async function PUT(
       "guest_phone",
       "guest_address",
       "room_configuration",
+      "room_selection",
       "meal_plan",
       "extra_bed",
+      "guest_pincode",
+      "guest_city",
+      "guest_state",
       "purpose",
       "justification",
       "arrival_date",
@@ -302,8 +308,13 @@ export async function PUT(
           : parsed.data[field];
 
       if (value !== undefined) {
-        req.input(field, value as string | number | boolean | null);
-        updates.push(`${field} = @${field}`);
+        if (field === "room_selection") {
+          req.input("room_selection", value ? JSON.stringify(value) : null);
+          updates.push("room_selection = @room_selection");
+        } else {
+          req.input(field, value as string | number | boolean | null);
+          updates.push(`${field} = @${field}`);
+        }
       }
     }
 
@@ -318,6 +329,14 @@ export async function PUT(
     if (parsed.data.guests) {
       req.input("guests", JSON.stringify(parsed.data.guests));
       updates.push("guests = @guests");
+    }
+
+    if (parsed.data.food_reservations) {
+      req.input(
+        "food_reservations",
+        parsed.data.food_reservations.length ? JSON.stringify(parsed.data.food_reservations) : null
+      );
+      updates.push("food_reservations = @food_reservations");
     }
 
     /* ---- totals ---- */

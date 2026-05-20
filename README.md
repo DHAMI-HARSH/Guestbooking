@@ -28,9 +28,7 @@ Full-stack Guest House Management System for colleges/institutions with role-bas
 - Approver action screen
 - Estate manager primary and secondary screens
 - Reports:
-  - monthly bookings
-  - guest history
-  - room usage
+  - date-range based booking report
 - Export reports to CSV/PDF
 
 ## API Routes
@@ -44,8 +42,8 @@ Full-stack Guest House Management System for colleges/institutions with role-bas
 - `PUT /api/bookings/:id`
 - `POST /api/approval`
 - `POST /api/room-allocation`
-- `GET /api/reports?type=monthly|guest-history|room-usage`
-- `GET /api/reports/export?type=...&format=csv|pdf`
+- `GET /api/reports?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
+- `GET /api/reports/export?format=csv|pdf&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
 
 ## Setup
 
@@ -100,7 +98,7 @@ npm run dev
 
 9. Verify database connection:
 
-- Open `http://localhost:3000/login`.
+- Open `http://localhost:<port>/login`.
 - Sign in with a seed user.
 - If login works and dashboard data loads, DB connection is successful.
 

@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { fetchReportData, type ReportType } from "@/lib/reports";
+import { fetchReportData, REPORT_COLUMNS } from "@/lib/reports";
 import { requireRoles } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
-function parseType(raw: string | null): ReportType | null {
-  if (raw === "monthly" || raw === "guest-history" || raw === "room-usage") {
-    return raw;
-  }
-  return null;
-}
-
 function toCsv(data: Record<string, unknown>[]) {
   if (!data.length) return "";
-  const headers = Object.keys(data[0]);
+  const headers = REPORT_COLUMNS;
   const rows = data.map((row) =>
     headers
       .map((h) => {
-        const value = row[h] ?? "";
+        const rawValue = row[h] ?? "";
+        const value =
+          (h === "Arrival Date" || h === "Departure Date") && rawValue ? `\t${String(rawValue)}` : rawValue;
         const text = String(value).replaceAll('"', '""');
         return `"${text}"`;
       })
@@ -30,40 +25,90 @@ function toCsv(data: Record<string, unknown>[]) {
 async function toPdf(title: string, data: Record<string, unknown>[]) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  let page = pdfDoc.addPage([842, 595]);
-  const { height } = page.getSize();
-  let y = height - 40;
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const pageSize: [number, number] = [595, 842]; // A4 portrait in points
+  const marginX = 36;
+  const marginY = 40;
+  const maxWidth = pageSize[0] - marginX * 2;
+  let page = pdfDoc.addPage(pageSize);
+  let y = pageSize[1] - marginY;
 
-  const drawLine = (text: string, size = 10) => {
-    if (y < 40) {
-      page = pdfDoc.addPage([842, 595]);
-      y = height - 40;
+  const lineGap = 4;
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (y - requiredHeight < marginY) {
+      page = pdfDoc.addPage(pageSize);
+      y = pageSize[1] - marginY;
     }
-    page.drawText(text, {
-      x: 24,
-      y,
-      size,
-      font,
-      color: rgb(0.1, 0.1, 0.1),
-    });
-    y -= size + 6;
   };
 
-  drawLine(title, 14);
-  drawLine(`Generated at: ${new Date().toISOString()}`, 9);
-  drawLine(" ");
+  const wrapText = (text: string, size: number, usedFont = font, width = maxWidth) => {
+    const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!normalized) return [""];
+    const words = normalized.split(" ");
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (usedFont.widthOfTextAtSize(candidate, size) <= width) {
+        current = candidate;
+        continue;
+      }
+      if (current) lines.push(current);
+      current = word;
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : [""];
+  };
+
+  const drawTextLine = (text: string, size: number, isBold = false, indent = 0) => {
+    ensureSpace(size + lineGap);
+    page.drawText(text, {
+      x: marginX + indent,
+      y,
+      size,
+      font: isBold ? boldFont : font,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= size + lineGap;
+  };
+
+  const drawWrapped = (text: string, size: number, isBold = false, indent = 0) => {
+    const lines = wrapText(text, size, isBold ? boldFont : font, maxWidth - indent);
+    for (const line of lines) {
+      drawTextLine(line, size, isBold, indent);
+    }
+  };
+
+  const drawKeyValue = (label: string, value: unknown) => {
+    const display = String(value ?? "").trim();
+    drawWrapped(`${label}:`, 10, true);
+    if (!display) {
+      drawTextLine("-", 10, false, 12);
+      return;
+    }
+    const lines = wrapText(display, 10, font, maxWidth - 12);
+    for (const line of lines) {
+      drawTextLine(line, 10, false, 12);
+    }
+  };
+
+  drawWrapped(title, 16, true);
+  drawWrapped(`Generated at: ${new Date().toLocaleString("en-GB")}`, 9);
+  drawTextLine(" ", 9);
 
   if (!data.length) {
-    drawLine("No records found.", 11);
+    drawWrapped("No records found.", 11, true);
   } else {
-    const headers = Object.keys(data[0]);
-    drawLine(headers.join(" | "), 10);
-    drawLine("-".repeat(140), 9);
+    const headers = REPORT_COLUMNS;
     for (const row of data) {
-      const line = headers
-        .map((header) => String(row[header] ?? "").replace(/\s+/g, " ").slice(0, 25))
-        .join(" | ");
-      drawLine(line, 9);
+      const bookingId = row["Booking ID"] ?? "";
+      drawWrapped(`Booking #${bookingId}`, 13, true);
+      for (const header of headers) {
+        if (header === "Booking ID") continue;
+        drawKeyValue(header, row[header]);
+      }
+      drawTextLine(" ", 10);
     }
   }
 
@@ -77,17 +122,23 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const type = parseType(searchParams.get("type"));
   const format = searchParams.get("format");
-  const month = searchParams.get("month") ?? undefined;
+  const startDate = searchParams.get("start_date");
+  const endDate = searchParams.get("end_date");
 
-  if (!type || !format || !["csv", "pdf"].includes(format)) {
+  if (!format || !["csv", "pdf"].includes(format) || !startDate || !endDate) {
     return NextResponse.json({ message: "Invalid report export request" }, { status: 400 });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    return NextResponse.json({ message: "Dates must be in YYYY-MM-DD format" }, { status: 400 });
+  }
+  if (startDate > endDate) {
+    return NextResponse.json({ message: "Start date must be on or before end date" }, { status: 400 });
   }
 
   try {
-    const data = (await fetchReportData(type, month)) as Record<string, unknown>[];
-    const fileBase = `${type}-report-${new Date().toISOString().slice(0, 10)}`;
+    const data = (await fetchReportData(startDate, endDate)) as Record<string, unknown>[];
+    const fileBase = `general-report-${new Date().toISOString().slice(0, 10)}`;
 
     if (format === "csv") {
       const csv = toCsv(data);
@@ -99,7 +150,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const pdf = await toPdf(`Guest House ${type.toUpperCase()} Report`, data);
+    const pdf = await toPdf(`Guest House Report (${startDate} to ${endDate})`, data);
     return new NextResponse(pdf, {
       headers: {
         "Content-Type": "application/pdf",

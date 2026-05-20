@@ -11,7 +11,6 @@ import { BookingManage } from "@/components/dashboard/booking-manage";
 import { MyBookings } from "@/components/dashboard/my-bookings";
 import { ApproverPanel } from "@/components/dashboard/approver-panel";
 import { EstatePrimaryPanel } from "@/components/dashboard/estate-primary-panel";
-import { RoomAllocationPanel } from "@/components/dashboard/room-allocation-panel";
 import { ReportsPanel } from "@/components/dashboard/reports-panel";
 import { AdminUsersPanel } from "@/components/dashboard/admin-users-panel";
 import { roleLabel } from "@/components/dashboard/shared";
@@ -97,7 +96,6 @@ export function DashboardApp({ user }: DashboardAppProps) {
           {showEmployeeTabs ? <TabsTrigger value="manage">Cancellation / Modify</TabsTrigger> : null}
           {showApproverTabs ? <TabsTrigger value="approval">Approval</TabsTrigger> : null}
           {showEstateTabs ? <TabsTrigger value="estate-primary">Estate Primary</TabsTrigger> : null}
-          {showEstateTabs ? <TabsTrigger value="room-allocation">Room Allocation</TabsTrigger> : null}
           {!showEmployeeTabs && canSelfBook ? <TabsTrigger value="self-booking">Self Booking</TabsTrigger> : null}
           {canViewReports ? <TabsTrigger value="reports">Reports</TabsTrigger> : null}
           {isAdmin ? <TabsTrigger value="admin">Admin</TabsTrigger> : null}
@@ -130,12 +128,6 @@ export function DashboardApp({ user }: DashboardAppProps) {
         {showEstateTabs ? (
           <TabsContent value="estate-primary">
             <EstatePrimaryPanel />
-          </TabsContent>
-        ) : null}
-
-        {showEstateTabs ? (
-          <TabsContent value="room-allocation">
-            <RoomAllocationPanel />
           </TabsContent>
         ) : null}
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 import { calculateTotals, bookingSchema } from "@/lib/validation";
 import { requireRoles } from "@/lib/permissions";
+import { parsePagination, toPaginationMeta } from "@/lib/pagination";
 import type { Role } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -80,11 +81,19 @@ export async function POST(request: NextRequest) {
       "room_configuration",
       parsed.data.room_configuration || null
     );
+    req.input(
+      "room_selection",
+      parsed.data.room_selection ? JSON.stringify(parsed.data.room_selection) : null
+    );
     req.input("meal_plan", parsed.data.meal_plan);
     req.input("extra_bed", parsed.data.extra_bed ? 1 : 0);
     req.input(
       "guests",
       parsed.data.guests?.length ? JSON.stringify(parsed.data.guests) : null
+    );
+    req.input(
+      "food_reservations",
+      parsed.data.food_reservations?.length ? JSON.stringify(parsed.data.food_reservations) : null
     );
     req.input(
       "estimated_cost",
@@ -132,10 +141,12 @@ export async function POST(request: NextRequest) {
         meal_plan,
         extra_bed,
         guests,
+        food_reservations,
         estimated_cost,
         purpose,
         justification,
         special_requests,
+        room_selection,
         arrival_date,
         arrival_time,
         departure_date,
@@ -165,10 +176,12 @@ export async function POST(request: NextRequest) {
         @meal_plan,
         @extra_bed,
         @guests,
+        @food_reservations,
         @estimated_cost,
         @purpose,
         @justification,
         @special_requests,
+        @room_selection,
         @arrival_date,
         @arrival_time,
         @departure_date,
@@ -221,6 +234,8 @@ export async function GET(request: NextRequest) {
   const guestPhone = searchParams.get("guest_phone");
   const approvalStatus = searchParams.get("approval_status");
   const estateStatus = searchParams.get("estate_status");
+  const query = searchParams.get("q");
+  const { page, limit, offset } = parsePagination(searchParams);
 
   try {
     const pool = await getDbPool();
@@ -234,8 +249,14 @@ export async function GET(request: NextRequest) {
     }
 
     const req = pool.request();
+    req.input("offset", offset);
+    req.input("limit", limit);
 
     const conditions: string[] = [];
+
+    /* Hide rejected records from panel listings */
+    conditions.push("b.approval_status <> 'REJECTED'");
+    conditions.push("b.estate_status <> 'ESTATE_REJECTED'");
 
     /* Employee sees only own bookings */
 
@@ -277,9 +298,37 @@ export async function GET(request: NextRequest) {
       conditions.push("b.estate_status = @estate_status");
     }
 
+    if (query && query.trim()) {
+      const trimmed = query.trim();
+      req.input("q_like", `%${trimmed}%`);
+      conditions.push(
+        "(" +
+          [
+            "CAST(b.id AS NVARCHAR(32)) LIKE @q_like",
+            "b.guest_name LIKE @q_like",
+            "b.guest_phone LIKE @q_like",
+            "b.guest_email LIKE @q_like",
+            "u.name LIKE @q_like",
+            "u.ecode LIKE @q_like",
+            "u.department LIKE @q_like",
+            "u.unit LIKE @q_like",
+          ].join(" OR ") +
+          ")",
+      );
+    }
+
     const whereClause = conditions.length
       ? `WHERE ${conditions.join(" AND ")}`
       : "";
+
+    const countResult = await req.query(`
+      SELECT COUNT(*) AS total
+      FROM Bookings b
+      INNER JOIN Users u ON u.id = b.created_by
+      ${whereClause}
+    `);
+
+    const total = Number((countResult.recordset[0] as { total?: unknown } | undefined)?.total ?? 0);
 
     const result = await req.query(`
       SELECT
@@ -290,11 +339,14 @@ export async function GET(request: NextRequest) {
       FROM Bookings b
       INNER JOIN Users u ON u.id = b.created_by
       ${whereClause}
-      ORDER BY b.created_at DESC
+      ORDER BY b.created_at DESC, b.id DESC
+      OFFSET @offset ROWS
+      FETCH NEXT @limit ROWS ONLY
     `);
 
     return NextResponse.json({
       bookings: result.recordset,
+      pagination: toPaginationMeta({ page, limit, total }),
     });
   } catch (error) {
     return NextResponse.json(
