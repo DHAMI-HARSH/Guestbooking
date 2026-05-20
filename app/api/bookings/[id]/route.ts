@@ -190,6 +190,7 @@ export async function PUT(
     if (
       parsed.data.approval_status &&
       effectiveSession.role !== "APPROVER" &&
+      effectiveSession.role !== "ESTATE_PRIMARY" &&
       effectiveSession.role !== "ADMIN"
     ) {
       const isCancellation =
@@ -198,7 +199,7 @@ export async function PUT(
 
       if (!isCancellation) {
         return NextResponse.json(
-          { message: "Only approver can update approval status" },
+          { message: "Only approver or estate manager can update approval status" },
           { status: 403 }
         );
       }

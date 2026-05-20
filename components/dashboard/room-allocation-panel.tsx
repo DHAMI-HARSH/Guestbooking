@@ -373,42 +373,263 @@ export function RoomAllocationPanel({
               </TableHeader>
               <TableBody>
                 {bookings.map((booking) => (
-                  <TableRow key={booking.id}>
-                    <TableCell>#{booking.id}</TableCell>
-                    <TableCell>{booking.guest_name}</TableCell>
-                    <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
-                    <TableCell>
-                      <div>{formatDisplayDate(booking.created_at)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    </TableCell>
-                    <TableCell>{booking.total_guests}</TableCell>
-                    <TableCell>
-                      {booking.extra_bed ? (
-                        <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <ApprovalBadge status={booking.approval_status} />
-                    </TableCell>
-                    <TableCell>
-                      <EstateBadge status={booking.estate_status} />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant={selected?.id === booking.id ? "destructive" : "outline"}
-                        size="sm"
-                        onClick={() =>
-                          setSelected((prev) => (prev?.id === booking.id ? null : booking))
-                        }
-                      >
-                        {selected?.id === booking.id ? <X className="h-4 w-4" /> : "Open"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow key={booking.id}>
+                      <TableCell>#{booking.id}</TableCell>
+                      <TableCell>{booking.guest_name}</TableCell>
+                      <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
+                      <TableCell>
+                        <div>{formatDisplayDate(booking.created_at)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(booking.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </TableCell>
+                      <TableCell>{booking.total_guests}</TableCell>
+                      <TableCell>
+                        {booking.extra_bed ? (
+                          <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <ApprovalBadge status={booking.approval_status} />
+                      </TableCell>
+                      <TableCell>
+                        <EstateBadge status={booking.estate_status} />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant={selected?.id === booking.id ? "destructive" : "outline"}
+                          size="sm"
+                          onClick={() =>
+                            setSelected((prev) => (prev?.id === booking.id ? null : booking))
+                          }
+                        >
+                          {selected?.id === booking.id ? <X className="h-4 w-4" /> : "Open"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {selected?.id === booking.id ? (
+                      <TableRow className="bg-secondary/20">
+                        <TableCell colSpan={9} className="p-4">
+                          <div className="space-y-4 rounded-lg border bg-secondary/10 p-4">
+                            <h3 className="font-semibold">Booking #{selected.id}</h3>
+                            <div className="grid gap-2 text-sm md:grid-cols-2">
+                              <p>
+                                <span className="font-medium">Booking Initiator:</span> {selected.guest_name}
+                              </p>
+                              <p>
+                                <span className="font-medium">Phone:</span> {selected.guest_phone}
+                              </p>
+                              <p>
+                                <span className="font-medium">Address:</span> {selected.guest_address}
+                              </p>
+                              <p>
+                                <span className="font-medium">Stay:</span> {selected.stay_days} day(s)
+                              </p>
+                              <p>
+                                <span className="font-medium">Counts:</span> Male - {selected.male_count}, Female - {selected.female_count}, Child - {selected.children_count}
+                              </p>
+                              <p>
+                                <span className="font-medium">Rooms Required:</span> {selected.rooms_required}
+                              </p>
+                              <p>
+                                <span className="font-medium">Room Preference:</span> {roomPreferenceSummary || selected.room_configuration || "Not specified"}
+                              </p>
+                              <p>
+                                <span className="font-medium">Extra Bed:</span> {selected.extra_bed ? "Yes (Free)" : "No"}
+                              </p>
+                              <p className="md:col-span-2">
+                                <span className="font-medium">Services:</span> {services.join(", ") || "None"}
+                              </p>
+                              <p className="md:col-span-2">
+                                <span className="font-medium">Special Requests:</span> {selected.special_requests?.trim() || "None"}
+                              </p>
+                            </div>
+
+                            <div id="room-allocation" className="space-y-3 rounded-md border bg-background/80 p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-semibold">Room Allocation Board</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Pick the stay dates to see availability. Green is free, red is occupied.
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {!embeddedBooking ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const params = new URLSearchParams();
+                                        if (selected) params.set("booking", String(selected.id));
+                                        if (allocationFrom) params.set("from", allocationFrom);
+                                        if (allocationTo) params.set("to", allocationTo);
+                                        const query = params.toString();
+                                        const url = `/dashboard/room-allocation${query ? `?${query}` : ""}#room-allocation`;
+                                        window.open(url, "_blank", "noopener,noreferrer");
+                                      }}
+                                    >
+                                      Open In New Window
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={loadAllocations}
+                                    disabled={allocationLoading || !allocationFrom || !allocationTo}
+                                  >
+                                    {allocationLoading ? "Loading..." : "Refresh Availability"}
+                                  </Button>
+                                </div>
+                              </div>
+                              {allocationNotice ? (
+                                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                                  {allocationNotice}
+                                </div>
+                              ) : null}
+
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label>From</Label>
+                                  <Input
+                                    type="date"
+                                    value={allocationFrom}
+                                    onChange={(e) => setAllocationFrom(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label>To</Label>
+                                  <Input
+                                    type="date"
+                                    value={allocationTo}
+                                    onChange={(e) => setAllocationTo(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+
+                              {allocationError ? <p className="text-xs text-red-600">{allocationError}</p> : null}
+
+                              <div className="flex flex-wrap gap-3 text-xs">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-3 w-3 rounded-sm bg-emerald-500/80" />
+                                  Available
+                                </span>
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-3 w-3 rounded-sm bg-red-500/80" />
+                                  Occupied
+                                </span>
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-3 w-3 rounded-sm border border-amber-400" />
+                                  Selected
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  Required: {roomsRequired} | Allocated: {allocatedForBooking.length} | Remaining: {remainingRooms}
+                                </span>
+                              </div>
+
+                              <div className="space-y-4">
+                                {roomsByFloor.map(([floor, rooms]) => (
+                                  <div key={floor} className="space-y-2">
+                                    <p className="text-sm font-semibold">{floor}</p>
+                                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+                                      {rooms.map((room) => {
+                                        const allocationsForRoom = occupiedByRoom.get(room.roomNumber) ?? [];
+                                        const occupiedByOther = allocationsForRoom.length > 0;
+                                        const isSelected = selectedRooms.includes(room.roomNumber);
+                                        const statusClass = occupiedByOther
+                                          ? "border-red-600 bg-red-500/20 text-red-700"
+                                          : "border-emerald-600 bg-emerald-500/20 text-emerald-800 hover:bg-emerald-500/30";
+                                        const tooltip = allocationsForRoom
+                                          .map(
+                                            (item) =>
+                                              `${item.guest_name} (${formatDisplayDate(item.arrival_date)} -> ${formatDisplayDate(
+                                                item.departure_date
+                                              )})`
+                                          )
+                                          .join(", ");
+
+                                        return (
+                                          <button
+                                            key={room.roomNumber}
+                                            type="button"
+                                            title={tooltip || "Available"}
+                                            className={`group relative flex flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-xs font-semibold transition ${
+                                              statusClass
+                                            } ${isSelected ? "ring-2 ring-amber-400 ring-offset-2" : ""} ${
+                                              !selected || occupiedByOther || remainingRooms === 0
+                                                ? "cursor-not-allowed opacity-70"
+                                                : "cursor-pointer"
+                                            }`}
+                                            onClick={() => {
+                                              if (!selected || occupiedByOther || remainingRooms === 0) return;
+                                              setSelectedRooms((prev) => {
+                                                if (prev.includes(room.roomNumber)) {
+                                                  return prev.filter((item) => item !== room.roomNumber);
+                                                }
+                                                if (prev.length >= remainingRooms) {
+                                                  setError(`You can only select ${remainingRooms} room(s) for this booking.`);
+                                                  return prev;
+                                                }
+                                                return [...prev, room.roomNumber];
+                                              });
+                                            }}
+                                          >
+                                            <span className="text-sm">{room.roomNumber}</span>
+                                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              {room.configuration}
+                                            </span>
+                                            {occupiedByOther ? (
+                                              <span className="text-[10px] font-medium text-red-700">Occupied</span>
+                                            ) : (
+                                              <span className="text-[10px] font-medium text-emerald-700">Free</span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                              <div className="space-y-1.5">
+                                <Label>Selected Rooms</Label>
+                                <Input value={selectedRooms.join(", ")} readOnly placeholder="Select rooms above" />
+                              </div>
+                              <div className="flex items-end">
+                                <Button
+                                  onClick={allocateRoom}
+                                  disabled={loading || selectedRooms.length === 0 || remainingRooms === 0}
+                                >
+                                  Allocate Room
+                                </Button>
+                              </div>
+                            </div>
+
+                            {remainingRooms === 0 ? (
+                              <p className="text-xs font-medium text-amber-700">
+                                All required rooms are already allocated. You can only cancel the booking.
+                              </p>
+                            ) : null}
+
+                            <div className="space-y-1.5">
+                              <Label>Rejection / Cancellation Remarks</Label>
+                              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <Button variant="destructive" onClick={() => updateEstateStatus("ESTATE_REJECTED")} disabled={loading}>
+                                Cancel Booking
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </>
                 ))}
               </TableBody>
             </Table>
@@ -423,7 +644,7 @@ export function RoomAllocationPanel({
           </>
         ) : null}
 
-        {selected ? (
+        {embeddedBooking && selected ? (
           <div className="space-y-4 rounded-lg border bg-secondary/20 p-4">
             <h3 className="font-semibold">Booking #{selected.id}</h3>
             <div className="grid gap-2 text-sm md:grid-cols-2">
