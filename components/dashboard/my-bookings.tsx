@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PaginationBar } from "@/components/ui/pagination";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
+import { TableFiltersBar, useTableControls, type TableFilterField } from "@/components/dashboard/table-controls";
 import { formatDisplayDate } from "@/lib/date";
 import type { BookingRecord } from "@/lib/types";
 
@@ -16,6 +18,21 @@ export function MyBookings({ refreshKey }: MyBookingsProps) {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const filterFields: TableFilterField<BookingRecord>[] = [
+    { key: "id", label: "ID", accessor: (booking: BookingRecord) => booking.id },
+    { key: "guest_name", label: "Guest", accessor: (booking: BookingRecord) => booking.guest_name },
+    { key: "arrival_date", label: "Arrival", type: "date", accessor: (booking: BookingRecord) => booking.arrival_date },
+    { key: "departure_date", label: "Departure", type: "date", accessor: (booking: BookingRecord) => booking.departure_date },
+    { key: "rooms_required", label: "Rooms", accessor: (booking: BookingRecord) => booking.rooms_required },
+    { key: "created_at", label: "Booked On", type: "date", accessor: (booking: BookingRecord) => booking.created_at },
+    { key: "approval_status", label: "Approval", accessor: (booking: BookingRecord) => booking.approval_status },
+    { key: "estate_status", label: "Estate", accessor: (booking: BookingRecord) => booking.estate_status },
+  ];
+  const table = useTableControls({
+    rows: bookings,
+    filterFields,
+    pageSize: 10,
+  });
 
   async function loadBookings() {
     setLoading(true);
@@ -46,12 +63,19 @@ export function MyBookings({ refreshKey }: MyBookingsProps) {
           <Button variant="outline" onClick={loadBookings} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
-          <span className="text-xs text-muted-foreground">
-            {bookings.length} booking(s)
-          </span>
+          <span className="text-xs text-muted-foreground">{table.filteredRows.length} booking(s)</span>
         </div>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        <TableFiltersBar
+          search={table.search}
+          onSearchChange={table.updateSearch}
+          filterFields={filterFields}
+          filterValues={table.filters}
+          onFilterChange={table.updateFilter}
+          onClear={table.clearFilters}
+        />
 
         <Table>
           <TableHeader>
@@ -67,14 +91,14 @@ export function MyBookings({ refreshKey }: MyBookingsProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bookings.length === 0 ? (
+            {table.pageRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
-                  No bookings found.
+                  {table.filteredRows.length === 0 ? "No bookings found." : "No bookings on this page."}
                 </TableCell>
               </TableRow>
             ) : (
-              bookings.map((booking) => (
+              table.pageRows.map((booking) => (
                 <TableRow key={booking.id}>
                   <TableCell>#{booking.id}</TableCell>
                   <TableCell>
@@ -101,6 +125,8 @@ export function MyBookings({ refreshKey }: MyBookingsProps) {
             )}
           </TableBody>
         </Table>
+
+        <PaginationBar pagination={table.pagination} onPageChange={table.setPage} loading={loading} />
       </CardContent>
     </Card>
   );

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { PaginationBar, type PaginationMeta } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { TableFiltersBar, useTableControls, type TableFilterField } from "@/components/dashboard/table-controls";
 import { formatDisplayDate } from "@/lib/date";
 import { parseServices } from "@/lib/utils";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
@@ -52,6 +53,21 @@ export function RoomAllocationPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [allocationNotice, setAllocationNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const filterFields: TableFilterField<BookingWithOwner>[] = [
+    { key: "id", label: "ID", accessor: (booking) => booking.id },
+    { key: "guest_name", label: "Booking Initiator", accessor: (booking) => booking.guest_name },
+    { key: "arrival_date", label: "Arrival", type: "date", accessor: (booking) => booking.arrival_date },
+    { key: "created_at", label: "Booked On", type: "date", accessor: (booking) => booking.created_at },
+    { key: "total_guests", label: "Guests", accessor: (booking) => booking.total_guests },
+    { key: "extra_bed", label: "Extras", accessor: (booking) => (booking.extra_bed ? "Extra bed" : "-") },
+    { key: "approval_status", label: "Approval", accessor: (booking) => booking.approval_status },
+    { key: "estate_status", label: "Estate", accessor: (booking) => booking.estate_status },
+  ];
+  const roomTable = useTableControls({
+    rows: bookings,
+    filterFields,
+    pageSize: 1000,
+  });
 
   const services = useMemo(() => {
     if (!selected) return [];
@@ -332,17 +348,6 @@ export function RoomAllocationPanel({
       <CardContent className="space-y-4">
         {!embeddedBooking ? (
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div className="space-y-1.5 md:w-[420px]">
-              <Label>Search</Label>
-              <Input
-                value={bookingSearch}
-                onChange={(e) => {
-                  setBookingsPage(1);
-                  setBookingSearch(e.target.value);
-                }}
-                placeholder="Search by booking id / name / phone / email / department"
-              />
-            </div>
             <Button
               variant="outline"
               onClick={() => loadBookings(bookingsPage, bookingSearch)}
@@ -357,6 +362,24 @@ export function RoomAllocationPanel({
 
         {!embeddedBooking ? (
           <>
+            <TableFiltersBar
+              search={bookingSearch}
+              onSearchChange={(value) => {
+                setBookingsPage(1);
+                setBookingSearch(value);
+                roomTable.updateSearch(value);
+              }}
+              filterFields={filterFields}
+              filterValues={roomTable.filters}
+              onFilterChange={roomTable.updateFilter}
+              onClear={() => {
+                roomTable.clearFilters();
+                setBookingsPage(1);
+                setBookingSearch("");
+              }}
+              searchPlaceholder="Search by booking id / name / phone / email / department"
+            />
+
             <Table>
               <TableHeader>
                 <TableRow>
@@ -372,9 +395,16 @@ export function RoomAllocationPanel({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bookings.map((booking) => (
-                  <>
-                    <TableRow key={booking.id}>
+                {roomTable.pageRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground">
+                      {roomTable.filteredRows.length === 0 ? "No bookings found." : "No bookings on this page."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  roomTable.pageRows.map((booking) => (
+                    <>
+                      <TableRow key={booking.id}>
                       <TableCell>#{booking.id}</TableCell>
                       <TableCell>{booking.guest_name}</TableCell>
                       <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
@@ -409,62 +439,62 @@ export function RoomAllocationPanel({
                           {selected?.id === booking.id ? <X className="h-4 w-4" /> : "Open"}
                         </Button>
                       </TableCell>
-                    </TableRow>
-                    {selected?.id === booking.id ? (
-                      <TableRow className="bg-secondary/20">
-                        <TableCell colSpan={9} className="p-4">
-                          <div className="space-y-4 rounded-lg border bg-secondary/10 p-4">
-                            <h3 className="font-semibold">Booking #{selected.id}</h3>
-                            <div className="grid gap-2 text-sm md:grid-cols-2">
-                              <p>
-                                <span className="font-medium">Booking Initiator:</span> {selected.guest_name}
-                              </p>
-                              <p>
-                                <span className="font-medium">Phone:</span> {selected.guest_phone}
-                              </p>
-                              <p>
-                                <span className="font-medium">Address:</span> {selected.guest_address}
-                              </p>
-                              <p>
-                                <span className="font-medium">Stay:</span> {selected.stay_days} day(s)
-                              </p>
-                              <p>
-                                <span className="font-medium">Counts:</span> Male - {selected.male_count}, Female - {selected.female_count}, Child - {selected.children_count}
-                              </p>
-                              <p>
-                                <span className="font-medium">Rooms Required:</span> {selected.rooms_required}
-                              </p>
-                              <p>
-                                <span className="font-medium">Room Preference:</span> {roomPreferenceSummary || selected.room_configuration || "Not specified"}
-                              </p>
-                              <p>
-                                <span className="font-medium">Extra Bed:</span> {selected.extra_bed ? "Yes (Free)" : "No"}
-                              </p>
-                              <p className="md:col-span-2">
-                                <span className="font-medium">Services:</span> {services.join(", ") || "None"}
-                              </p>
-                              <p className="md:col-span-2">
-                                <span className="font-medium">Special Requests:</span> {selected.special_requests?.trim() || "None"}
-                              </p>
-                            </div>
+                      </TableRow>
+                      {selected?.id === booking.id ? (
+                        <TableRow className="bg-secondary/20">
+                          <TableCell colSpan={9} className="p-4">
+                            <div className="space-y-4 rounded-lg border bg-secondary/10 p-4">
+                              <h3 className="font-semibold">Booking #{selected.id}</h3>
+                              <div className="grid gap-2 text-sm md:grid-cols-2">
+                                <p>
+                                  <span className="font-medium">Booking Initiator:</span> {selected.guest_name}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Phone:</span> {selected.guest_phone}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Address:</span> {selected.guest_address}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Stay:</span> {selected.stay_days} day(s)
+                                </p>
+                                <p>
+                                  <span className="font-medium">Counts:</span> Male - {selected.male_count}, Female - {selected.female_count}, Child - {selected.children_count}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Rooms Required:</span> {selected.rooms_required}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Room Preference:</span> {roomPreferenceSummary || selected.room_configuration || "Not specified"}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Extra Bed:</span> {selected.extra_bed ? "Yes (Free)" : "No"}
+                                </p>
+                                <p className="md:col-span-2">
+                                  <span className="font-medium">Services:</span> {services.join(", ") || "None"}
+                                </p>
+                                <p className="md:col-span-2">
+                                  <span className="font-medium">Special Requests:</span> {selected.special_requests?.trim() || "None"}
+                                </p>
+                              </div>
 
-                            <div id="room-allocation" className="space-y-3 rounded-md border bg-background/80 p-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-semibold">Room Allocation Board</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    Pick the stay dates to see availability. Green is free, red is occupied.
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {!embeddedBooking ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        const params = new URLSearchParams();
-                                        if (selected) params.set("booking", String(selected.id));
-                                        if (allocationFrom) params.set("from", allocationFrom);
+                              <div id="room-allocation" className="space-y-3 rounded-md border bg-background/80 p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold">Room Allocation Board</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Pick the stay dates to see availability. Green is free, red is occupied.
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {!embeddedBooking ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          const params = new URLSearchParams();
+                                          if (selected) params.set("booking", String(selected.id));
+                                          if (allocationFrom) params.set("from", allocationFrom);
                                         if (allocationTo) params.set("to", allocationTo);
                                         const query = params.toString();
                                         const url = `/dashboard/room-allocation${query ? `?${query}` : ""}#room-allocation`;
@@ -592,45 +622,46 @@ export function RoomAllocationPanel({
                                   </div>
                                 ))}
                               </div>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                              <div className="space-y-1.5">
-                                <Label>Selected Rooms</Label>
-                                <Input value={selectedRooms.join(", ")} readOnly placeholder="Select rooms above" />
                               </div>
-                              <div className="flex items-end">
-                                <Button
-                                  onClick={allocateRoom}
-                                  disabled={loading || selectedRooms.length === 0 || remainingRooms === 0}
-                                >
-                                  Allocate Room
+
+                              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                <div className="space-y-1.5">
+                                  <Label>Selected Rooms</Label>
+                                  <Input value={selectedRooms.join(", ")} readOnly placeholder="Select rooms above" />
+                                </div>
+                                <div className="flex items-end">
+                                  <Button
+                                    onClick={allocateRoom}
+                                    disabled={loading || selectedRooms.length === 0 || remainingRooms === 0}
+                                  >
+                                    Allocate Room
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {remainingRooms === 0 ? (
+                                <p className="text-xs font-medium text-amber-700">
+                                  All required rooms are already allocated. You can only cancel the booking.
+                                </p>
+                              ) : null}
+
+                              <div className="space-y-1.5">
+                                <Label>Rejection / Cancellation Remarks</Label>
+                                <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <Button variant="destructive" onClick={() => updateEstateStatus("ESTATE_REJECTED")} disabled={loading}>
+                                  Cancel Booking
                                 </Button>
                               </div>
                             </div>
-
-                            {remainingRooms === 0 ? (
-                              <p className="text-xs font-medium text-amber-700">
-                                All required rooms are already allocated. You can only cancel the booking.
-                              </p>
-                            ) : null}
-
-                            <div className="space-y-1.5">
-                              <Label>Rejection / Cancellation Remarks</Label>
-                              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <Button variant="destructive" onClick={() => updateEstateStatus("ESTATE_REJECTED")} disabled={loading}>
-                                Cancel Booking
-                              </Button>
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </>
-                ))}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </>
+                  ))
+                )}
               </TableBody>
             </Table>
 

@@ -23,8 +23,25 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: "Invalid data", errors: parsed.error.flatten() }, { status: 400 });
     }
 
-    const updates: string[] = [];
     const pool = await getDbPool();
+    const creatorResult = await pool
+      .request()
+      .input("id", userId)
+      .query(`
+        SELECT TOP 1 created_by_admin_id
+        FROM Users
+        WHERE id = @id
+      `);
+
+    const target = creatorResult.recordset[0] as { created_by_admin_id?: number | null } | undefined;
+    if (!target) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+    if (target.created_by_admin_id !== null && target.created_by_admin_id !== auth.session.id) {
+      return NextResponse.json({ message: "You can only update accounts you created" }, { status: 403 });
+    }
+
+    const updates: string[] = [];
     const req = pool.request();
     req.input("id", userId);
 
@@ -52,15 +69,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const result = await req.query(`
       UPDATE Users
       SET ${updates.join(", ")}
-      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active, INSERTED.created_at
+      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active, INSERTED.created_by_admin_id, INSERTED.created_at
       WHERE id = @id
     `);
 
     const updated = result.recordset[0];
-    if (!updated) {
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
-    }
-
     return NextResponse.json({ message: "User updated", user: updated });
   } catch (error) {
     return NextResponse.json(
@@ -69,4 +82,3 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     );
   }
 }
-

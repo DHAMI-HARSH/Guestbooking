@@ -3,8 +3,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PaginationBar } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
+import { TableFiltersBar, useTableControls, type TableFilterField } from "@/components/dashboard/table-controls";
 import { formatDisplayDate } from "@/lib/date";
 import { parseServices } from "@/lib/utils";
 import type { BookingRecord } from "@/lib/types";
@@ -26,6 +28,20 @@ export function EstatePrimaryPanel() {
   const [allocationLoading, setAllocationLoading] = useState(false);
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [roomHighlightId, setRoomHighlightId] = useState<number | null>(null);
+  const filterFields: TableFilterField<BookingWithOwner>[] = [
+    { key: "arrival_date", label: "Arrival Date", type: "date", accessor: (booking) => booking.arrival_date },
+    { key: "created_at", label: "Booked On", type: "date", accessor: (booking) => booking.created_at },
+    { key: "guest_name", label: "Guest", accessor: (booking) => booking.guest_name },
+    { key: "booking_owner_name", label: "Booking Owner", accessor: (booking) => booking.booking_owner_name || "" },
+    { key: "booking_owner_department", label: "Department", accessor: (booking) => booking.booking_owner_department || "" },
+    { key: "approval_status", label: "Approval Status", accessor: (booking) => booking.approval_status },
+    { key: "estate_status", label: "Estate Status", accessor: (booking) => booking.estate_status },
+  ];
+  const table = useTableControls({
+    rows: bookings,
+    filterFields,
+    pageSize: 10,
+  });
 
   async function loadBookings() {
     setLoading(true);
@@ -170,6 +186,14 @@ export function EstatePrimaryPanel() {
         </div>
 
         {/* Table Section */}
+        <TableFiltersBar
+          search={table.search}
+          onSearchChange={table.updateSearch}
+          filterFields={filterFields}
+          filterValues={table.filters}
+          onFilterChange={table.updateFilter}
+          onClear={table.clearFilters}
+        />
         <div className="rounded-lg border overflow-hidden">
           <Table>
             <TableHeader className="bg-gray-50">
@@ -185,7 +209,7 @@ export function EstatePrimaryPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bookings.map((booking) => (
+              {table.pageRows.map((booking) => (
                 <Fragment key={booking.id}>
                   <TableRow className="hover:bg-gray-50">
                     <TableCell className="text-sm">{formatDisplayDate(booking.arrival_date)}</TableCell>
@@ -351,6 +375,7 @@ export function EstatePrimaryPanel() {
             </TableBody>
           </Table>
         </div>
+        <PaginationBar pagination={table.pagination} onPageChange={table.setPage} loading={loading} />
       </CardContent>
     </Card>
   );

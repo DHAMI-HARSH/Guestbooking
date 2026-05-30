@@ -10,6 +10,23 @@ function normalizeEcode(value: string) {
   return value.trim().toUpperCase();
 }
 
+async function resolveSessionUserId(
+  pool: Awaited<ReturnType<typeof getDbPool>>,
+  ecode: string,
+): Promise<number | null> {
+  const result = await pool
+    .request()
+    .input("ecode", normalizeEcode(ecode))
+    .query(`
+      SELECT TOP 1 id
+      FROM Users
+      WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+    `);
+
+  const row = result.recordset[0] as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireRoles(request, ["ADMIN"]);
 
@@ -23,11 +40,17 @@ export async function GET(request: NextRequest) {
     const { page, limit, offset } = parsePagination(searchParams);
 
     const pool = await getDbPool();
+    const currentAdminId = await resolveSessionUserId(pool, auth.session.ecode);
+    if (!currentAdminId) {
+      return NextResponse.json({ message: "Session user no longer exists. Please login again." }, { status: 401 });
+    }
+
     const req = pool.request();
     req.input("offset", offset);
     req.input("limit", limit);
+    req.input("created_by_admin_id", currentAdminId);
 
-    const conditions: string[] = [];
+    const conditions: string[] = ["created_by_admin_id = @created_by_admin_id"];
 
     if (query && query.trim()) {
       req.input("q_like", `%${query.trim()}%`);
@@ -64,6 +87,7 @@ export async function GET(request: NextRequest) {
         unit,
         role,
         is_active,
+        created_by_admin_id,
         created_at
       FROM Users
       ${whereClause}
@@ -106,6 +130,11 @@ export async function POST(request: NextRequest) {
     }
 
     const pool = await getDbPool();
+    const currentAdminId = await resolveSessionUserId(pool, auth.session.ecode);
+    if (!currentAdminId) {
+      return NextResponse.json({ message: "Session user no longer exists. Please login again." }, { status: 401 });
+    }
+
     const ecode = normalizeEcode(parsed.data.ecode);
 
     const exists = await pool
@@ -132,11 +161,12 @@ export async function POST(request: NextRequest) {
     req.input("role", parsed.data.role);
     req.input("password_hash", parsed.data.password);
     req.input("is_active", parsed.data.is_active ?? true);
+    req.input("created_by_admin_id", currentAdminId);
 
     const result = await req.query(`
-      INSERT INTO Users (ecode, name, unit, department, role, password_hash, is_active)
-      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active
-      VALUES (@ecode, @name, @unit, @department, @role, @password_hash, @is_active)
+      INSERT INTO Users (ecode, name, unit, department, role, password_hash, is_active, created_by_admin_id)
+      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active, INSERTED.created_by_admin_id
+      VALUES (@ecode, @name, @unit, @department, @role, @password_hash, @is_active, @created_by_admin_id)
     `);
 
     return NextResponse.json({

@@ -204,20 +204,25 @@ export function BookingForm({ onCreated }: BookingFormProps) {
 
     return true;
   };
+const isReviewReady = useMemo(() => {
+  return (
+    validateStep(0) &&
+    validateStep(1) &&
+    validateStep(2) &&
+    validateStep(3)
+  );
+}, [form]);
 
-  const isReviewReady = () =>
-    validateStep(0) && validateStep(1) && validateStep(2) && validateStep(3);
+const canNavigateToStep = (target: number) => {
+  if (target === reviewStepIndex) return isReviewReady;
+  return true;
+};
 
-  const canNavigateToStep = (target: number) => {
-    if (target === reviewStepIndex) return isReviewReady();
-    return true;
-  };
-
-  useEffect(() => {
-    if (currentStep === reviewStepIndex && !isReviewReady()) {
-      setCurrentStep(reviewStepIndex - 1);
-    }
-  }, [currentStep, reviewStepIndex, form]);
+useEffect(() => {
+  if (currentStep === reviewStepIndex && !isReviewReady) {
+    setCurrentStep(reviewStepIndex - 1);
+  }
+}, [currentStep, reviewStepIndex, isReviewReady]);
 
   const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
   const maxArrivalStr = useMemo(() => format(addMonths(new Date(), 1), "yyyy-MM-dd"), []);

@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PaginationBar } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
+import { TableFiltersBar, useTableControls, type TableFilterField } from "@/components/dashboard/table-controls";
 import { formatDisplayDate } from "@/lib/date";
 import type { BookingRecord } from "@/lib/types";
 
@@ -32,6 +34,20 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const filterFields: TableFilterField<BookingWithOwner>[] = [
+    { key: "id", label: "ID", accessor: (booking) => booking.id },
+    { key: "guest_name", label: "Guest", accessor: (booking) => booking.guest_name },
+    { key: "guest_phone", label: "Phone", accessor: (booking) => booking.guest_phone },
+    { key: "arrival_date", label: "Arrival", type: "date", accessor: (booking) => booking.arrival_date },
+    { key: "extra_bed", label: "Extras", accessor: (booking) => (booking.extra_bed ? "Extra bed" : "-") },
+    { key: "approval_status", label: "Approval", accessor: (booking) => booking.approval_status },
+    { key: "estate_status", label: "Estate", accessor: (booking) => booking.estate_status },
+  ];
+  const table = useTableControls({
+    rows: bookings,
+    filterFields,
+    pageSize: 10,
+  });
 
   async function searchBookings() {
     setLoading(true);
@@ -161,6 +177,15 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
         {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
+        <TableFiltersBar
+          search={table.search}
+          onSearchChange={table.updateSearch}
+          filterFields={filterFields}
+          filterValues={table.filters}
+          onFilterChange={table.updateFilter}
+          onClear={table.clearFilters}
+        />
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -175,41 +200,47 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bookings.map((booking) => (
-              <TableRow key={booking.id}>
-                <TableCell>{booking.id}</TableCell>
-                <TableCell>{booking.guest_name}</TableCell>
-                <TableCell>{booking.guest_phone}</TableCell>
-                <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
-                <TableCell>
-                  {booking.extra_bed ? (
-                    <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <ApprovalBadge status={booking.approval_status} />
-                </TableCell>
-                <TableCell>
-                  <EstateBadge status={booking.estate_status} />
-                </TableCell>
-                <TableCell className="space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(booking)}>
-                    Modify
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => cancelBooking(booking.id)}
-                  >
-                    Cancel
-                  </Button>
+            {table.pageRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                  {table.filteredRows.length === 0 ? "No bookings found." : "No bookings on this page."}
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              table.pageRows.map((booking) => (
+                <TableRow key={booking.id}>
+                  <TableCell>{booking.id}</TableCell>
+                  <TableCell>{booking.guest_name}</TableCell>
+                  <TableCell>{booking.guest_phone}</TableCell>
+                  <TableCell>{formatDisplayDate(booking.arrival_date)}</TableCell>
+                  <TableCell>
+                    {booking.extra_bed ? (
+                      <span className="text-xs font-semibold text-emerald-700">Extra bed (Free)</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <ApprovalBadge status={booking.approval_status} />
+                  </TableCell>
+                  <TableCell>
+                    <EstateBadge status={booking.estate_status} />
+                  </TableCell>
+                  <TableCell className="space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => setEditing(booking)}>
+                      Modify
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => cancelBooking(booking.id)}>
+                      Cancel
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
+
+        <PaginationBar pagination={table.pagination} onPageChange={table.setPage} loading={loading} />
 
         <div className="space-y-1.5">
           <Label>Cancellation Remarks</Label>

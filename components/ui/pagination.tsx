@@ -36,12 +36,7 @@ export function PaginationBar({
         <span className="font-medium text-foreground">{pagination.total}</span> record(s)
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onPageChange(1)}
-          disabled={loading || !hasPrev}
-        >
+        <Button size="sm" variant="outline" onClick={() => onPageChange(1)} disabled={loading || !hasPrev}>
           First
         </Button>
         <Button
@@ -72,4 +67,3 @@ export function PaginationBar({
     </div>
   );
 }
-

@@ -15,6 +15,7 @@ CREATE TABLE Users (
   role VARCHAR(30) NOT NULL CHECK (role IN ('EMPLOYEE', 'APPROVER', 'ESTATE_PRIMARY', 'ADMIN')),
   password_hash VARCHAR(255) NOT NULL,
   is_active BIT NOT NULL DEFAULT 1,
+  created_by_admin_id INT NULL,
   created_at DATETIME NOT NULL DEFAULT GETDATE()
 );
 GO
@@ -51,11 +52,13 @@ CREATE TABLE Bookings (
   rooms_required INT NOT NULL DEFAULT 0 CHECK (rooms_required >= 0),
   booking_cost_center VARCHAR(50) NOT NULL,
   created_by INT NOT NULL,
+  created_by_admin_id INT NULL,
   approval_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_APPROVAL' CHECK (approval_status IN ('PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED')),
   estate_status VARCHAR(40) NOT NULL DEFAULT 'PENDING_ESTATE_REVIEW' CHECK (estate_status IN ('PENDING_ESTATE_REVIEW', 'ROOM_ALLOCATED', 'SERVICES_APPROVED', 'ESTATE_REJECTED')),
   cancellation_remarks NVARCHAR(MAX) NULL,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-  CONSTRAINT FK_Bookings_Users FOREIGN KEY (created_by) REFERENCES Users(id)
+  CONSTRAINT FK_Bookings_Users FOREIGN KEY (created_by) REFERENCES Users(id),
+  CONSTRAINT FK_Users_CreatedByAdmin FOREIGN KEY (created_by_admin_id) REFERENCES Users(id)
 );
 GO
 
@@ -85,4 +88,5 @@ CREATE INDEX IX_Bookings_ArrivalDate ON Bookings(arrival_date);
 CREATE INDEX IX_Bookings_Status ON Bookings(approval_status, estate_status);
 CREATE INDEX IX_Approvals_BookingId ON Approvals(booking_id);
 CREATE INDEX IX_RoomAllocation_BookingId ON RoomAllocation(booking_id);
+CREATE INDEX IX_Users_CreatedByAdminId ON Users(created_by_admin_id);
 GO

@@ -3,11 +3,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PaginationBar } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ApprovalBadge } from "@/components/dashboard/shared";
+import { TableFiltersBar, useTableControls, type TableFilterField } from "@/components/dashboard/table-controls";
 import { formatDisplayDate } from "@/lib/date";
 import { parseServices } from "@/lib/utils";
 import type { BookingRecord } from "@/lib/types";
@@ -53,6 +54,33 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
   const [allocatedRooms, setAllocatedRooms] = useState<string[]>([]);
   const [allocationLoading, setAllocationLoading] = useState(false);
   const [allocationError, setAllocationError] = useState<string | null>(null);
+  const pendingFilterFields: TableFilterField<BookingWithOwner>[] = [
+    { key: "id", label: "Booking", accessor: (booking) => booking.id },
+    { key: "created_at", label: "Booked On", type: "date", accessor: (booking) => booking.created_at },
+    { key: "guest_name", label: "Guest", accessor: (booking) => booking.guest_name },
+    { key: "extra_bed", label: "Extras", accessor: (booking) => (booking.extra_bed ? "Extra bed" : "-") },
+    { key: "justification", label: "Justification", accessor: (booking) => booking.justification || "" },
+    { key: "booking_owner_name", label: "Booked By", accessor: (booking) => booking.booking_owner_name || "" },
+    { key: "booking_owner_department", label: "Department", accessor: (booking) => booking.booking_owner_department || "" },
+    { key: "approval_status", label: "Status", accessor: (booking) => booking.approval_status },
+  ];
+  const pendingTable = useTableControls({
+    rows: bookings,
+    filterFields: pendingFilterFields,
+    pageSize: 10,
+  });
+  const decidedFilterFields: TableFilterField<DecidedBooking>[] = [
+    { key: "id", label: "Booking", accessor: (booking) => booking.id },
+    { key: "decision", label: "Decision", accessor: (booking) => booking.decision || "" },
+    { key: "decided_at", label: "Decided On", type: "date", accessor: (booking) => booking.decided_at || "" },
+    { key: "guest_name", label: "Guest", accessor: (booking) => booking.guest_name },
+    { key: "arrival_date", label: "Arrival", type: "date", accessor: (booking) => booking.arrival_date },
+  ];
+  const decidedTable = useTableControls({
+    rows: decidedBookings,
+    filterFields: decidedFilterFields,
+    pageSize: 10,
+  });
 
   const services = useMemo(() => {
     if (!selected) return [];
@@ -195,12 +223,6 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
-          <Input
-            className="max-w-xs"
-            placeholder="Search guest name"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
           <Button variant="outline" onClick={() => loadPending(search)}>
             Refresh
           </Button>
@@ -219,6 +241,19 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
         {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
+        <TableFiltersBar
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            pendingTable.updateSearch(value);
+          }}
+          filterFields={pendingFilterFields}
+          filterValues={pendingTable.filters}
+          onFilterChange={pendingTable.updateFilter}
+          onClear={pendingTable.clearFilters}
+          searchPlaceholder="Search pending bookings"
+        />
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -234,7 +269,7 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bookings.map((booking) => (
+            {pendingTable.pageRows.map((booking) => (
               <Fragment key={booking.id}>
                 <TableRow>
                   <TableCell>#{booking.id}</TableCell>
@@ -386,11 +421,21 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
             ))}
           </TableBody>
         </Table>
+        <PaginationBar pagination={pendingTable.pagination} onPageChange={pendingTable.setPage} loading={loading} />
 
         {showDecisions ? (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">My Accepted / Rejected Bookings</h3>
             {decisionsError ? <p className="text-sm text-red-600">{decisionsError}</p> : null}
+            <TableFiltersBar
+              search={decidedTable.search}
+              onSearchChange={decidedTable.updateSearch}
+              filterFields={decidedFilterFields}
+              filterValues={decidedTable.filters}
+              onFilterChange={decidedTable.updateFilter}
+              onClear={decidedTable.clearFilters}
+              searchPlaceholder="Search decided bookings"
+            />
             <Table>
               <TableHeader>
                 <TableRow>
@@ -409,14 +454,14 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
                       Loading decisions...
                     </TableCell>
                   </TableRow>
-                ) : decidedBookings.length === 0 ? (
+                ) : decidedTable.pageRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                      No decisions yet.
+                      {decidedTable.filteredRows.length === 0 ? "No decisions yet." : "No decisions on this page."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  decidedBookings.map((booking) => (
+                  decidedTable.pageRows.map((booking) => (
                     <Fragment key={booking.id}>
                       <TableRow>
                         <TableCell>#{booking.id}</TableCell>
@@ -540,6 +585,7 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
                 )}
               </TableBody>
             </Table>
+            <PaginationBar pagination={decidedTable.pagination} onPageChange={decidedTable.setPage} loading={decisionsLoading} />
           </div>
         ) : null}
 
