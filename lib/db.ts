@@ -22,37 +22,37 @@ function envBool(value: string | undefined, fallback: boolean) {
 
 async function createPool() {
   const sslRequired = envBool(process.env.DB_SSL, false);
-  const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || undefined;
   const host = process.env.DB_HOST || process.env.PGHOST;
-  const user = process.env.DB_USER || process.env.PGUSER;
-  const password = process.env.DB_PASSWORD || process.env.PGPASSWORD;
-  const database = process.env.DB_NAME || process.env.PGDATABASE;
   const port = process.env.DB_PORT
     ? Number(process.env.DB_PORT)
     : process.env.PGPORT
       ? Number(process.env.PGPORT)
       : 5432;
+  const user = process.env.DB_USER || process.env.PGUSER;
+  const password = process.env.DB_PASSWORD || process.env.PGPASSWORD;
+  const database = process.env.DB_NAME || process.env.PGDATABASE;
+  const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || undefined;
   const baseOptions = {
     ssl: sslRequired ? { rejectUnauthorized: false } : undefined,
     max: 10,
     idleTimeoutMillis: 30000,
   } as const;
 
-  if (connectionString) {
+  if (host || user || password || database) {
     const config: PoolConfig = {
-      connectionString,
+      host,
+      port,
+      user,
+      password,
+      database: database || "postgres",
       ...baseOptions,
     };
     return new Pool(config);
   }
 
-  if (host || user || password || database) {
+  if (connectionString) {
     const config: PoolConfig = {
-      host: host || "localhost",
-      port,
-      user,
-      password,
-      database: database || "guestbooking",
+      connectionString,
       ...baseOptions,
     };
     return new Pool(config);
