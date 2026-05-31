@@ -100,6 +100,7 @@ export async function POST(request: Request) {
     const loginAttempt = await recordLoginAttempt(pool, {
       subjectKey,
       ipAddress: clientIp,
+      ecode,
     });
 
     if (loginAttempt.status === "banned") {

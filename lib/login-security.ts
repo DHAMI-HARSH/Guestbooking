@@ -2,6 +2,7 @@ import type { DbPool } from "@/lib/db";
 
 type LoginSecurityRow = {
   subject_key: string;
+  ecode: string | null;
   ip_address: string;
   attempt_count: number;
   warning_count: number;
@@ -29,12 +30,17 @@ export async function ensureLoginSecurityTable(pool: DbPool) {
       await pool.request().query(`
         CREATE TABLE IF NOT EXISTS login_security (
           subject_key VARCHAR(128) PRIMARY KEY,
+          ecode VARCHAR(20) NULL,
           ip_address VARCHAR(128) NOT NULL,
           attempt_count INT NOT NULL DEFAULT 0,
           warning_count INT NOT NULL DEFAULT 0,
           banned_until TIMESTAMPTZ NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS ecode VARCHAR(20)
       `);
       await pool.request().query(`
         ALTER TABLE login_security
@@ -56,6 +62,14 @@ export async function ensureLoginSecurityTable(pool: DbPool) {
         ALTER TABLE login_security
           ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ALTER COLUMN ecode DROP NOT NULL
+      `);
+      await pool.request().query(`
+        UPDATE login_security
+        SET ecode = COALESCE(NULLIF(ecode, ''), 'unknown')
+      `);
     })().catch((error) => {
       ensureTablePromise = null;
       throw error;
@@ -74,6 +88,7 @@ export async function getLoginSecurityState(pool: DbPool, subjectKey: string) {
     .query(`
       SELECT
         subject_key,
+        ecode,
         ip_address,
         attempt_count,
         warning_count,
@@ -100,7 +115,7 @@ export async function clearLoginSecurityState(pool: DbPool, subjectKey: string) 
 
 export async function recordLoginAttempt(
   pool: DbPool,
-  input: { subjectKey: string; ipAddress: string },
+  input: { subjectKey: string; ipAddress: string; ecode?: string | null },
 ) {
   await ensureLoginSecurityTable(pool);
 
@@ -135,6 +150,7 @@ export async function recordLoginAttempt(
   await pool
     .request()
     .input("subject_key", input.subjectKey)
+    .input("ecode", input.ecode?.trim() || "unknown")
     .input("ip_address", input.ipAddress)
     .input("attempt_count", bannedUntil ? 0 : nextAttemptCount)
     .input("warning_count", nextWarningCount)
@@ -142,6 +158,7 @@ export async function recordLoginAttempt(
     .query(`
       INSERT INTO login_security (
         subject_key,
+        ecode,
         ip_address,
         attempt_count,
         warning_count,
@@ -150,6 +167,7 @@ export async function recordLoginAttempt(
       )
       VALUES (
         @subject_key,
+        @ecode,
         @ip_address,
         @attempt_count,
         @warning_count,
@@ -158,6 +176,7 @@ export async function recordLoginAttempt(
       )
       ON CONFLICT (subject_key)
       DO UPDATE SET
+        ecode = EXCLUDED.ecode,
         ip_address = EXCLUDED.ip_address,
         attempt_count = EXCLUDED.attempt_count,
         warning_count = EXCLUDED.warning_count,
