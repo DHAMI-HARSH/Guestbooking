@@ -185,7 +185,7 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
       if (!res.ok) throw new Error(data.detail || data.message || "Failed to submit decision");
       setMessage(`Booking #${bookingId} ${decision.toLowerCase()}.`);
       await loadPending(search);
-      await loadRecentApprovals();
+      await loadDecisions();
       onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Decision failed");
