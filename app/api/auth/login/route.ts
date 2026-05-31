@@ -3,6 +3,15 @@ import bcrypt from "bcryptjs";
 import { getDbPool } from "@/lib/db";
 import { getSessionCookieName, signSessionToken } from "@/lib/auth";
 import type { SessionUser } from "@/lib/types";
+import {
+  buildLoginSubjectKey,
+  clearLoginSecurityState,
+  ensureLoginSecurityTable,
+  getLoginSecurityState,
+  normalizeClientIp,
+  recordFailedLoginAttempt,
+} from "@/lib/login-security";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -53,6 +62,10 @@ export async function POST(request: Request) {
 
     const ecode = normalizeEcode(payload.ecode);
     const password = normalizePassword(payload.password);
+    const turnstileToken =
+      typeof (payload as { "cf-turnstile-response"?: unknown })["cf-turnstile-response"] === "string"
+        ? ((payload as { "cf-turnstile-response": string })["cf-turnstile-response"] as string)
+        : null;
 
     if (!ecode || !password) {
       return NextResponse.json(
@@ -62,6 +75,46 @@ export async function POST(request: Request) {
     }
 
     const pool = await getDbPool();
+    await ensureLoginSecurityTable(pool);
+
+    const clientIp = normalizeClientIp(
+      request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-forwarded-for") ||
+        request.headers.get("x-real-ip"),
+    );
+    const subjectKey = buildLoginSubjectKey(ecode, clientIp);
+    const securityState = await getLoginSecurityState(pool, subjectKey);
+
+    if (securityState?.banned_until && new Date(securityState.banned_until).getTime() > Date.now()) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((new Date(securityState.banned_until).getTime() - Date.now()) / 1000),
+      );
+
+      return NextResponse.json(
+        {
+          message: `Too many failed attempts. Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`,
+          retryAfterSeconds,
+        },
+        { status: 429 }
+      );
+    }
+
+    const turnstileResult = await verifyTurnstileToken({
+      token: turnstileToken || "",
+      remoteIp: clientIp,
+      action: "login",
+    });
+
+    if (!turnstileResult.success) {
+      return NextResponse.json(
+        {
+          message: "Captcha verification failed. Please try again.",
+          captchaErrors: "errors" in turnstileResult ? turnstileResult.errors : [],
+        },
+        { status: 400 }
+      );
+    }
 
     const result = await pool.request().input("ecode", ecode).query(`
       SELECT
@@ -92,24 +145,66 @@ export async function POST(request: Request) {
       | undefined;
 
     if (!user || user.is_active === false) {
+      const loginState = await recordFailedLoginAttempt(pool, {
+        subjectKey,
+        ecode,
+        ipAddress: clientIp,
+      });
+
       console.warn("[auth/login] Invalid credentials", {
         ecode,
         userFound: false,
       });
+
+      if (loginState.status === "banned") {
+        return NextResponse.json(
+          {
+            message: "Too many failed attempts. Try again in 1 minute.",
+            retryAfterSeconds: loginState.retryAfterSeconds,
+            warning: loginState.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
+
       return NextResponse.json(
-        { message: "Invalid credentials" },
+        {
+          message: "Invalid credentials",
+          warning: loginState.warningMessage,
+        },
         { status: 401 }
       );
     }
 
     const validPassword = await matchesPassword(user.password_hash, password);
     if (!validPassword) {
+      const loginState = await recordFailedLoginAttempt(pool, {
+        subjectKey,
+        ecode,
+        ipAddress: clientIp,
+      });
+
       console.warn("[auth/login] Invalid credentials", {
         ecode,
         userFound: Boolean(user),
       });
+
+      if (loginState.status === "banned") {
+        return NextResponse.json(
+          {
+            message: "Too many failed attempts. Try again in 1 minute.",
+            retryAfterSeconds: loginState.retryAfterSeconds,
+            warning: loginState.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
+
       return NextResponse.json(
-        { message: "Invalid credentials" },
+        {
+          message: "Invalid credentials",
+          warning: loginState.warningMessage,
+        },
         { status: 401 }
       );
     }
@@ -124,6 +219,8 @@ export async function POST(request: Request) {
     };
 
     const token = await signSessionToken(sessionUser);
+
+    await clearLoginSecurityState(pool, subjectKey);
 
     const response = NextResponse.json({
       message: "Login success",

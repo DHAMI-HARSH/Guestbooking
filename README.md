@@ -59,10 +59,14 @@ npm install
 copy .env.example .env.local
 ```
 
-3. Update `.env.local` with your PostgreSQL connection string:
+3. Update `.env.local` with your PostgreSQL connection details:
 
 ```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/guestbooking
+DB_HOST=aws-1-ap-northeast-2.pooler.supabase.com
+DB_PORT=5432
+DB_USER=postgres.blcocysbvqftdldanejj
+DB_PASSWORD=your-password
+DB_NAME=postgres
 DB_SSL=true
 ```
 
@@ -95,8 +99,11 @@ npm run dev
 1. Create a PostgreSQL database, including Supabase if you prefer hosted Postgres.
 2. Run `database/schema.sql`.
 3. Run `database/seed.sql`.
-4. Set `DATABASE_URL` and `DB_SSL` in `.env.local`.
-5. Start app with `npm run dev` and test login.
+4. Set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL` in `.env.local`.
+5. Add your Cloudflare Turnstile keys if you want login protection enabled locally:
+   - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+   - `TURNSTILE_SECRET_KEY`
+6. Start app with `npm run dev` and test login.
 
 ## Default Seed Logins
 
@@ -108,9 +115,9 @@ npm run dev
 ## Deployment Notes
 
 - Use a managed PostgreSQL database or Supabase for easiest deployment.
-- If the app is hosted on Vercel, set `DATABASE_URL` and `DB_SSL=true` in the Vercel Environment Variables screen.
-- Avoid mixing old `DB_HOST` / `PGHOST` values with `DATABASE_URL`; the app now prefers `DATABASE_URL` first.
-- Keep `DATABASE_URL` and `JWT_SECRET` in environment variables, never in source control.
+- If the app is hosted on Vercel, set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL=true`, `JWT_SECRET`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, and `TURNSTILE_SECRET_KEY` in the Vercel Environment Variables screen.
+- The login form uses Cloudflare Turnstile invisible mode, so you must create a Turnstile widget in Cloudflare and paste its site key and secret key into those env vars.
+- Keep database, Turnstile, and JWT secrets in environment variables, never in source control.
 
 ## Folder Structure
 

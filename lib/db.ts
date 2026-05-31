@@ -187,7 +187,7 @@ class DbTransaction {
   }
 }
 
-class DbPool {
+export class DbPool {
   constructor(private readonly pool: Pool) {}
 
   request() {

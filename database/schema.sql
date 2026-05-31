@@ -176,3 +176,16 @@ CREATE INDEX ix_roomallocation_bookingid
 
 CREATE INDEX ix_users_createdbyadminid
     ON users(created_by_admin_id);
+
+CREATE TABLE IF NOT EXISTS login_security (
+    subject_key VARCHAR(320) PRIMARY KEY,
+    ecode VARCHAR(20) NOT NULL,
+    ip_address VARCHAR(128) NOT NULL,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    warning_count INT NOT NULL DEFAULT 0,
+    banned_until TIMESTAMPTZ NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_login_security_banned_until
+    ON login_security(banned_until);
