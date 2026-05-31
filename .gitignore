@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local database assets
+/database/
+
 # production
 /build
 
