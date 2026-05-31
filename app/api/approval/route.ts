@@ -13,9 +13,10 @@ async function resolveSessionUserId(
     .request()
     .input("ecode", ecode.trim().toUpperCase())
     .query(`
-      SELECT TOP 1 id
-      FROM Users
+      SELECT id
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+      LIMIT 1
     `);
 
   const row = result.recordset[0] as { id: number } | undefined;
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     const bookingCheck = await pool
       .request()
       .input("booking_id", parsed.data.booking_id)
-      .query("SELECT TOP 1 id, approval_status FROM Bookings WHERE id = @booking_id");
+      .query("SELECT id, approval_status FROM bookings WHERE id = @booking_id LIMIT 1");
 
     const booking = bookingCheck.recordset[0];
     if (!booking) {
@@ -63,14 +64,14 @@ export async function POST(request: NextRequest) {
         .input("decision", parsed.data.decision)
         .input("remarks", parsed.data.remarks || null)
         .query(
-          "INSERT INTO Approvals (booking_id, approver_id, decision, remarks) VALUES (@booking_id, @approver_id, @decision, @remarks)",
+          "INSERT INTO approvals (booking_id, approver_id, decision, remarks) VALUES (@booking_id, @approver_id, @decision, @remarks)",
         );
 
       await tx
         .request()
         .input("booking_id", parsed.data.booking_id)
         .input("status", statusValue)
-        .query("UPDATE Bookings SET approval_status = @status WHERE id = @booking_id");
+        .query("UPDATE bookings SET approval_status = @status WHERE id = @booking_id");
 
       await tx.commit();
     } catch (error) {
@@ -110,17 +111,18 @@ export async function GET(request: NextRequest) {
         .input("approver_id", approverId)
         .input("limit", limit)
         .query(`
-          SELECT TOP (@limit)
+          SELECT
             a.id AS approval_id,
             a.booking_id,
             a.decision,
             a.remarks,
-            a.[date] AS decided_at,
+            a.date AS decided_at,
             b.*
-          FROM Approvals a
-          INNER JOIN Bookings b ON b.id = a.booking_id
+          FROM approvals a
+          INNER JOIN bookings b ON b.id = a.booking_id
           WHERE a.approver_id = @approver_id
-          ORDER BY a.[date] DESC
+          ORDER BY a.date DESC
+          LIMIT @limit
         `);
 
       return NextResponse.json({ approvals: result.recordset });
@@ -131,18 +133,19 @@ export async function GET(request: NextRequest) {
       .input("approver_id", approverId)
       .input("limit", limit)
       .query(`
-        SELECT TOP (@limit)
+        SELECT
           a.id,
           a.booking_id,
           a.decision,
           a.remarks,
-          a.[date] AS decided_at,
+          a.date AS decided_at,
           b.guest_name,
           b.arrival_date
-        FROM Approvals a
-        INNER JOIN Bookings b ON b.id = a.booking_id
+        FROM approvals a
+        INNER JOIN bookings b ON b.id = a.booking_id
         WHERE a.approver_id = @approver_id
-        ORDER BY a.[date] DESC
+        ORDER BY a.date DESC
+        LIMIT @limit
       `);
 
     return NextResponse.json({ approvals: result.recordset });

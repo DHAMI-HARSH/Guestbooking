@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { getDbPool } from "@/lib/db";
 import { requireRoles } from "@/lib/permissions";
 import { adminUserUpdateSchema } from "@/lib/validation";
@@ -28,9 +29,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       .request()
       .input("id", userId)
       .query(`
-        SELECT TOP 1 created_by_admin_id
-        FROM Users
+        SELECT created_by_admin_id
+        FROM users
         WHERE id = @id
+        LIMIT 1
       `);
 
     const target = creatorResult.recordset[0] as { created_by_admin_id?: number | null } | undefined;
@@ -56,10 +58,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     if (typeof parsed.data.password === "string" && parsed.data.password.trim().length > 0) {
-      // NOTE: Current system uses `password_hash` as a password field (plain-text comparison in login).
-      // We keep the existing behavior and treat this as a password reset.
       updates.push("password_hash = @password_hash");
-      req.input("password_hash", parsed.data.password);
+      req.input("password_hash", await bcrypt.hash(parsed.data.password, 10));
     }
 
     if (updates.length === 0) {
@@ -67,10 +67,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     const result = await req.query(`
-      UPDATE Users
+      UPDATE users
       SET ${updates.join(", ")}
-      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active, INSERTED.created_by_admin_id, INSERTED.created_at
       WHERE id = @id
+      RETURNING id, ecode, name, department, unit, role, is_active, created_by_admin_id, created_at
     `);
 
     const updated = result.recordset[0];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { FilterX, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,31 +150,50 @@ export function TableFiltersBar<T>({
   searchPlaceholder?: string;
 }) {
   return (
-    <div className="space-y-4 rounded-lg border bg-secondary/20 p-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="space-y-1.5 md:col-span-2 xl:col-span-2">
-          <Label>Search</Label>
-          <Input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={searchPlaceholder} />
+    <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] xl:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+        <div className="space-y-1.5 lg:col-span-1">
+          <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Search
+          </Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={searchPlaceholder}
+              className="h-11 pl-9"
+            />
+          </div>
         </div>
 
         {filterFields.map((field) => (
           <div key={field.key} className="space-y-1.5">
-            <Label>{field.label}</Label>
+            <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              {field.label}
+            </Label>
             <Input
               type={field.type ?? "text"}
               value={filterValues[field.key] ?? ""}
               onChange={(event) => onFilterChange(field.key, event.target.value)}
               placeholder={field.placeholder ?? `Filter ${field.label}`}
+              className="h-11"
             />
           </div>
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+        <p className="text-xs text-slate-500">
           Use the search box to scan all visible columns, or filter each column directly.
         </p>
-        <Button variant="outline" size="sm" onClick={onClear}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          className="gap-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        >
+          <FilterX className="h-4 w-4" />
           Clear Filters
         </Button>
       </div>

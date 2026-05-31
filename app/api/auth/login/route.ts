@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { getDbPool } from "@/lib/db";
 import { getSessionCookieName, signSessionToken } from "@/lib/auth";
 import type { SessionUser } from "@/lib/types";
@@ -15,6 +16,16 @@ function normalizePassword(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+async function matchesPassword(stored: string, candidate: string) {
+  const normalizedStored = stored.trim();
+
+  if (/^\$2[aby]\$/.test(normalizedStored)) {
+    return await bcrypt.compare(candidate, normalizedStored);
+  }
+
+  return normalizedStored === candidate;
 }
 
 function asDevErrorMessage(error: unknown) {
@@ -52,68 +63,22 @@ export async function POST(request: Request) {
 
     const pool = await getDbPool();
 
-    const columnsResult = await pool.request().query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Users'
-    `);
-
-    const userColumns = new Set(
-      columnsResult.recordset.map((row: { COLUMN_NAME: string }) =>
-        row.COLUMN_NAME.toLowerCase()
-      )
-    );
-
-    const requiredColumns = ["id", "ecode", "role", "password_hash"];
-    const missingRequired = requiredColumns.filter((c) => !userColumns.has(c));
-    if (missingRequired.length > 0) {
-      console.error("[auth/login] Users schema mismatch", {
-        missingRequired,
-      });
-      return NextResponse.json(
-        {
-          message: "Database schema mismatch",
-          detail:
-            process.env.NODE_ENV === "production"
-              ? undefined
-              : `Missing Users columns: ${missingRequired.join(", ")}`,
-        },
-        { status: 500 }
-      );
-    }
-
-    const query = pool.request();
-    query.input("ecode", ecode);
-    query.input("password", password);
-
-    const hasIsActive = userColumns.has("is_active");
-    const hasName = userColumns.has("name");
-    const hasDepartment = userColumns.has("department");
-    const hasUnit = userColumns.has("unit");
-
-    if (hasIsActive) {
-      query.input("is_active", true);
-    }
-
-    const resultWithStatus = await query.query(`
-      SELECT TOP 1
+    const result = await pool.request().input("ecode", ecode).query(`
+      SELECT
         id,
         ecode,
-        ${hasName ? "name" : "CAST('' AS NVARCHAR(120)) AS name"},
-        ${
-          hasDepartment
-            ? "department"
-            : "CAST('' AS NVARCHAR(120)) AS department"
-        },
-        ${hasUnit ? "unit" : "CAST(NULL AS NVARCHAR(120)) AS unit"},
-        role
-      FROM Users
+        name,
+        department,
+        unit,
+        role,
+        password_hash,
+        is_active
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
-      AND password_hash = @password
-      ${hasIsActive ? "AND is_active = @is_active" : ""}
+      LIMIT 1
     `);
 
-    const user = resultWithStatus.recordset[0] as
+    const user = result.recordset[0] as
       | {
           id: number;
           ecode: string;
@@ -121,13 +86,27 @@ export async function POST(request: Request) {
           department: string;
           unit: string | null;
           role: SessionUser["role"];
+          password_hash: string;
+          is_active: boolean;
         }
       | undefined;
 
-    if (!user) {
+    if (!user || user.is_active === false) {
       console.warn("[auth/login] Invalid credentials", {
         ecode,
         userFound: false,
+      });
+      return NextResponse.json(
+        { message: "Invalid credentials" },
+        { status: 401 }
+      );
+    }
+
+    const validPassword = await matchesPassword(user.password_hash, password);
+    if (!validPassword) {
+      console.warn("[auth/login] Invalid credentials", {
+        ecode,
+        userFound: Boolean(user),
       });
       return NextResponse.json(
         { message: "Invalid credentials" },

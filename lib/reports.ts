@@ -8,6 +8,44 @@ export { REPORT_COLUMNS } from "@/lib/report-columns";
 
 type ReportRow = Record<(typeof REPORT_COLUMNS)[number], string | number>;
 
+type ReportDbRow = {
+  id: number;
+  created_at: unknown;
+  guest_name: string;
+  guest_email: string;
+  guest_phone: string;
+  guest_address: string;
+  guest_pincode: string;
+  guest_city: string;
+  guest_state: string;
+  guests: string | null;
+  food_reservations: string | null;
+  arrival_date: unknown;
+  arrival_time: string;
+  departure_date: unknown;
+  departure_time: string;
+  stay_days: number;
+  meal_plan: string;
+  extra_bed: boolean;
+  room_configuration: string | null;
+  room_selection: string | null;
+  rooms_required: number;
+  male_count: number;
+  female_count: number;
+  children_count: number;
+  total_guests: number;
+  special_requests: string | null;
+  services_required: string | null;
+  booking_cost_center: string;
+  estimated_cost: number | null;
+  purpose: string;
+  justification: string;
+  approval_status: string;
+  estate_status: string;
+  cancellation_remarks: string | null;
+  department: string;
+};
+
 function formatDate(value: unknown) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(String(value));
@@ -176,21 +214,21 @@ async function fetchReportInternal(
 ): Promise<{ rows: ReportRow[]; total: number }> {
   const pool = await getDbPool();
   const req = pool.request();
-  req.input("start_date", new Date(`${startDate}T00:00:00`));
-  req.input("end_date", new Date(`${endDate}T00:00:00`));
+  req.input("start_date", startDate);
+  req.input("end_date", endDate);
 
   const conditions: string[] = ["b.arrival_date BETWEEN @start_date AND @end_date"];
 
   if (q && q.trim()) {
     req.input("q_like", `%${q.trim()}%`);
     conditions.push(
-      "(" +
+        "(" +
         [
-          "CAST(b.id AS NVARCHAR(32)) LIKE @q_like",
-          "b.guest_name LIKE @q_like",
-          "b.guest_phone LIKE @q_like",
-          "b.guest_email LIKE @q_like",
-          "u.department LIKE @q_like",
+          "CAST(b.id AS TEXT) ILIKE @q_like",
+          "b.guest_name ILIKE @q_like",
+          "b.guest_phone ILIKE @q_like",
+          "b.guest_email ILIKE @q_like",
+          "u.department ILIKE @q_like",
         ].join(" OR ") +
         ")",
     );
@@ -204,8 +242,8 @@ async function fetchReportInternal(
   if (shouldCount) {
     const countResult = await req.query(`
       SELECT COUNT(*) AS total
-      FROM Bookings b
-      INNER JOIN Users u ON u.id = b.created_by
+      FROM bookings b
+      INNER JOIN users u ON u.id = b.created_by
       ${whereClause}
     `);
     total = Number((countResult.recordset[0] as { total?: unknown } | undefined)?.total ?? 0);
@@ -216,9 +254,9 @@ async function fetchReportInternal(
     req.input("limit", limit);
   }
 
-  const paginationClause =
-    typeof offset === "number" && typeof limit === "number"
-      ? "OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY"
+    const paginationClause =
+      typeof offset === "number" && typeof limit === "number"
+      ? "LIMIT @limit OFFSET @offset"
       : "";
 
   const result = await req.query(`
@@ -258,14 +296,15 @@ async function fetchReportInternal(
       b.estate_status,
       b.cancellation_remarks,
       u.department AS department
-    FROM Bookings b
-    INNER JOIN Users u ON u.id = b.created_by
+    FROM bookings b
+    INNER JOIN users u ON u.id = b.created_by
     ${whereClause}
     ORDER BY b.arrival_date DESC, b.id DESC
     ${paginationClause};
   `);
 
-  const rows = result.recordset.map((row) => {
+  const rows = result.recordset.map((record) => {
+    const row = record as ReportDbRow;
     const specialRequests =
       typeof row.special_requests === "string" && row.special_requests.trim().length > 0
         ? row.special_requests.trim()

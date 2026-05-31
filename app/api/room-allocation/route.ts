@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         .request()
         .input("booking_id", parsed.data.booking_id)
         .query(
-          "SELECT TOP 1 rooms_required FROM Bookings WITH (UPDLOCK, ROWLOCK) WHERE id = @booking_id"
+          "SELECT rooms_required FROM bookings WHERE id = @booking_id FOR UPDATE"
         );
       const booking = bookingResult.recordset[0] as { rooms_required: number } | undefined;
       if (!booking) {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         .request()
         .input("booking_id", parsed.data.booking_id)
         .query(
-          "SELECT COUNT(*) AS count FROM RoomAllocation WITH (UPDLOCK, ROWLOCK) WHERE booking_id = @booking_id AND allocation_status = 'ALLOCATED'"
+          "SELECT COUNT(*) AS count FROM roomallocation WHERE booking_id = @booking_id AND allocation_status = 'ALLOCATED'"
         );
       const allocatedCount = Number(allocatedCountResult.recordset[0]?.count ?? 0);
       if (allocatedCount >= booking.rooms_required) {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         .input("booking_id", parsed.data.booking_id)
         .input("room_number", parsed.data.room_number)
         .query(
-          "SELECT COUNT(*) AS count FROM RoomAllocation WHERE booking_id = @booking_id AND room_number = @room_number AND allocation_status = 'ALLOCATED'"
+          "SELECT COUNT(*) AS count FROM roomallocation WHERE booking_id = @booking_id AND room_number = @room_number AND allocation_status = 'ALLOCATED'"
         );
       const existingRoomCount = Number(existingRoomResult.recordset[0]?.count ?? 0);
       if (existingRoomCount > 0) {
@@ -70,9 +70,9 @@ export async function POST(request: NextRequest) {
         .input("booking_id", parsed.data.booking_id)
         .input("room_number", parsed.data.room_number)
         .input("allocation_status", parsed.data.allocation_status).query(`
-          INSERT INTO RoomAllocation (booking_id, room_number, allocation_status)
-          OUTPUT INSERTED.*
-          VALUES (@booking_id, @room_number, @allocation_status);
+          INSERT INTO roomallocation (booking_id, room_number, allocation_status)
+          VALUES (@booking_id, @room_number, @allocation_status)
+          RETURNING *
         `);
 
       const estateStatus = parsed.data.allocation_status === "ALLOCATED" ? "ROOM_ALLOCATED" : "PENDING_ESTATE_REVIEW";
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         .request()
         .input("booking_id", parsed.data.booking_id)
         .input("estate_status", estateStatus)
-        .query("UPDATE Bookings SET estate_status = @estate_status WHERE id = @booking_id");
+        .query("UPDATE bookings SET estate_status = @estate_status WHERE id = @booking_id");
 
       await tx.commit();
       return NextResponse.json({ message: "Room allocation updated", allocation: allocation.recordset[0] });

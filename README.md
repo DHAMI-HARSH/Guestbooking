@@ -7,8 +7,8 @@ Full-stack Guest House Management System for colleges/institutions with role-bas
 - Frontend: Next.js 14 (App Router) + TypeScript
 - UI: Tailwind CSS + shadcn-style component primitives
 - Backend: Next.js API routes
-- Database: Microsoft SQL Server
-- Driver: `mssql`
+- Database: PostgreSQL
+- Driver: `pg`
 - Auth: JWT cookie session + role-based access
 
 ## Roles
@@ -59,44 +59,32 @@ npm install
 copy .env.example .env.local
 ```
 
-3. Update `.env.local` with your SQL Server details:
+3. Update `.env.local` with your PostgreSQL connection:
 
 ```env
-DB_SERVER=192.168.1.20
-DB_PORT=1433
-DB_USER=sa
-DB_PASSWORD=your_password
-DB_NAME=guesthouse
-DB_ENCRYPT=false
-DB_TRUST_CERT=true
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/guestbooking
+DB_SSL=true
 ```
 
-4. In SQL Server Configuration Manager:
-
-- Enable `TCP/IP` for your SQL Server instance.
-- Restart the SQL Server service.
-
-5. In Windows Firewall, allow inbound TCP `1433` from trusted machines.
-
-6. Create database and tables in SQL Server Management Studio:
+4. Create the database and tables in PostgreSQL:
 
 ```sql
 -- Open and run: database/schema.sql
 ```
 
-7. Insert sample data:
+5. Insert sample data:
 
 ```sql
 -- Open and run: database/seed.sql
 ```
 
-8. Run the app:
+6. Run the app:
 
 ```bash
 npm run dev
 ```
 
-9. Verify database connection:
+7. Verify database connection:
 
 - Open `http://localhost:<port>/login`.
 - Sign in with a seed user.
@@ -104,14 +92,11 @@ npm run dev
 
 ## Step-by-Step: Connect to Database (Quick Guide)
 
-1. Install SQL Server and SQL Server Management Studio.
-2. Enable SQL Authentication and create a login (for example `sa`).
-3. Enable `TCP/IP` and confirm port `1433`.
-4. Create database `guesthouse`.
-5. Run `database/schema.sql`.
-6. Run `database/seed.sql`.
-7. Set database values in `.env.local`.
-8. Start app with `npm run dev` and test login.
+1. Create a PostgreSQL database, including Supabase if you prefer hosted Postgres.
+2. Run `database/schema.sql`.
+3. Run `database/seed.sql`.
+4. Set `DATABASE_URL` and `DB_SSL` in `.env.local`.
+5. Start app with `npm run dev` and test login.
 
 ## Default Seed Logins
 
@@ -120,15 +105,11 @@ npm run dev
 - `EST001 / password`
 - `EST002 / password`
 
-## LAN + Vercel Deployment Notes
+## Deployment Notes
 
-- Host SQL Server on LAN machine with static private IP (example: `192.168.1.20`).
-- Ensure SQL Server TCP/IP is enabled on port `1433`.
-- Allow inbound firewall rules for SQL Server from trusted internal subnets.
-- For Vercel-hosted frontend/API to reach on-prem SQL Server, expose backend securely:
-  - preferred: site-to-site VPN or private tunnel (Cloudflare Tunnel / Tailscale Funnel / reverse proxy),
-  - avoid direct public SQL port exposure.
-- If internal-only deployment is required, run this Next.js app on an internal server instead of public Vercel.
+- Use a managed PostgreSQL database or Supabase for easiest deployment.
+- If the app is hosted on Vercel, make sure the Postgres instance allows remote connections from your deployment.
+- Keep `DATABASE_URL` and `JWT_SECRET` in environment variables, never in source control.
 
 ## Folder Structure
 

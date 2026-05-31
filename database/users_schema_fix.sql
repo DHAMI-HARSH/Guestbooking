@@ -1,96 +1,200 @@
--- Users table schema validation/repair script (SQL Server)
--- Target schema:
--- id INT PRIMARY KEY
--- ecode VARCHAR(20) UNIQUE NOT NULL
--- name NVARCHAR(120)
--- department NVARCHAR(120)
--- unit NVARCHAR(120)
--- role VARCHAR(30)
--- password_hash VARCHAR(255)
--- is_active BIT
--- created_at DATETIME DEFAULT GETDATE()
+-- Users table schema validation/repair script (PostgreSQL version)
 
-SET NOCOUNT ON;
-
-IF OBJECT_ID('dbo.Users', 'U') IS NULL
+DO $$
 BEGIN
-  CREATE TABLE dbo.Users (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    ecode VARCHAR(20) NOT NULL UNIQUE,
-    name NVARCHAR(120) NOT NULL,
-    department NVARCHAR(120) NOT NULL,
-    unit NVARCHAR(120) NULL,
-    role VARCHAR(30) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    is_active BIT NOT NULL DEFAULT 1,
-    created_at DATETIME NOT NULL DEFAULT GETDATE()
-  );
-  RETURN;
-END;
+    -- Create table if it does not exist
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+    ) THEN
 
-IF COL_LENGTH('dbo.Users', 'ecode') IS NULL
-  ALTER TABLE dbo.Users ADD ecode VARCHAR(20) NULL;
+        CREATE TABLE users (
+            id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            ecode VARCHAR(20) NOT NULL UNIQUE,
+            name VARCHAR(120) NOT NULL,
+            department VARCHAR(120) NOT NULL,
+            unit VARCHAR(120) NULL,
+            role VARCHAR(30) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
 
-IF COL_LENGTH('dbo.Users', 'name') IS NULL
-  ALTER TABLE dbo.Users ADD name NVARCHAR(120) NULL;
+        RETURN;
+    END IF;
 
-IF COL_LENGTH('dbo.Users', 'department') IS NULL
-  ALTER TABLE dbo.Users ADD department NVARCHAR(120) NULL;
+    -- Add missing columns
 
-IF COL_LENGTH('dbo.Users', 'unit') IS NULL
-  ALTER TABLE dbo.Users ADD unit NVARCHAR(120) NULL;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'ecode'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN ecode VARCHAR(20);
+    END IF;
 
-IF COL_LENGTH('dbo.Users', 'role') IS NULL
-  ALTER TABLE dbo.Users ADD role VARCHAR(30) NULL;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'name'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN name VARCHAR(120);
+    END IF;
 
-IF COL_LENGTH('dbo.Users', 'password_hash') IS NULL
-  ALTER TABLE dbo.Users ADD password_hash VARCHAR(255) NULL;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'department'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN department VARCHAR(120);
+    END IF;
 
-IF COL_LENGTH('dbo.Users', 'is_active') IS NULL
-  ALTER TABLE dbo.Users ADD is_active BIT NOT NULL CONSTRAINT DF_Users_is_active DEFAULT 1;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'unit'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN unit VARCHAR(120);
+    END IF;
 
-IF COL_LENGTH('dbo.Users', 'created_at') IS NULL
-  ALTER TABLE dbo.Users ADD created_at DATETIME NOT NULL CONSTRAINT DF_Users_created_at DEFAULT GETDATE();
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'role'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN role VARCHAR(30);
+    END IF;
 
-ALTER TABLE dbo.Users ALTER COLUMN ecode VARCHAR(20) NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN name NVARCHAR(120) NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN department NVARCHAR(120) NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN unit NVARCHAR(120) NULL;
-ALTER TABLE dbo.Users ALTER COLUMN role VARCHAR(30) NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN password_hash VARCHAR(255) NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN is_active BIT NOT NULL;
-ALTER TABLE dbo.Users ALTER COLUMN created_at DATETIME NOT NULL;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'password_hash'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN password_hash VARCHAR(255);
+    END IF;
 
-IF NOT EXISTS (
-  SELECT 1
-  FROM sys.key_constraints
-  WHERE parent_object_id = OBJECT_ID('dbo.Users')
-    AND [type] = 'PK'
-)
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'is_active'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+          AND column_name = 'created_at'
+    ) THEN
+        ALTER TABLE users
+        ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+    END IF;
+
+END $$;
+
+-- Ensure column definitions
+
+ALTER TABLE users
+    ALTER COLUMN ecode TYPE VARCHAR(20),
+    ALTER COLUMN ecode SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN name TYPE VARCHAR(120),
+    ALTER COLUMN name SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN department TYPE VARCHAR(120),
+    ALTER COLUMN department SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN unit TYPE VARCHAR(120),
+    ALTER COLUMN unit DROP NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN role TYPE VARCHAR(30),
+    ALTER COLUMN role SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN password_hash TYPE VARCHAR(255),
+    ALTER COLUMN password_hash SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN is_active TYPE BOOLEAN
+    USING (
+        CASE
+            WHEN is_active IN ('1', 'true', 'TRUE', 't') THEN TRUE
+            ELSE FALSE
+        END
+    );
+
+ALTER TABLE users
+    ALTER COLUMN is_active SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN is_active SET DEFAULT TRUE;
+
+ALTER TABLE users
+    ALTER COLUMN created_at TYPE TIMESTAMP
+    USING created_at::timestamp;
+
+ALTER TABLE users
+    ALTER COLUMN created_at SET NOT NULL;
+
+ALTER TABLE users
+    ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+-- Add primary key only if no primary key exists
+
+DO $$
 BEGIN
-  ALTER TABLE dbo.Users ADD CONSTRAINT PK_Users PRIMARY KEY (id);
-END;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'users'::regclass
+          AND contype = 'p'
+    ) THEN
 
-IF NOT EXISTS (
-  SELECT 1
-  FROM sys.indexes
-  WHERE object_id = OBJECT_ID('dbo.Users')
-    AND is_unique = 1
-    AND name = 'UQ_Users_ecode'
-)
+        ALTER TABLE users
+        ADD CONSTRAINT pk_users PRIMARY KEY (id);
+
+    END IF;
+END $$;
+
+-- Add unique constraint on ecode if missing
+
+DO $$
 BEGIN
-  ALTER TABLE dbo.Users ADD CONSTRAINT UQ_Users_ecode UNIQUE (ecode);
-END;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'users'::regclass
+          AND conname = 'uq_users_ecode'
+    ) THEN
 
-DECLARE @createdAtDefault sysname;
-SELECT @createdAtDefault = dc.name
-FROM sys.default_constraints dc
-JOIN sys.columns c
-  ON c.default_object_id = dc.object_id
-WHERE dc.parent_object_id = OBJECT_ID('dbo.Users')
-  AND c.name = 'created_at';
+        ALTER TABLE users
+        ADD CONSTRAINT uq_users_ecode UNIQUE (ecode);
 
-IF @createdAtDefault IS NOT NULL
-  EXEC('ALTER TABLE dbo.Users DROP CONSTRAINT ' + QUOTENAME(@createdAtDefault));
+    END IF;
+END $$;
 
-ALTER TABLE dbo.Users ADD CONSTRAINT DF_Users_created_at DEFAULT GETDATE() FOR created_at;
+-- Ensure index exists
+
+CREATE INDEX IF NOT EXISTS ix_users_ecode
+ON users(ecode);

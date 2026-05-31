@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Bell, LogOut, UserCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +20,6 @@ interface DashboardAppProps {
 }
 
 export function DashboardApp({ user }: DashboardAppProps) {
-  const router = useRouter();
   const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
   const [tab, setTab] = useState(() => {
     if (user.role === "ADMIN") return "admin";
@@ -37,6 +35,7 @@ export function DashboardApp({ user }: DashboardAppProps) {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
+        cache: "no-store",
       });
       if (!response.ok) {
         console.error("Logout failed", response.status);
@@ -44,8 +43,7 @@ export function DashboardApp({ user }: DashboardAppProps) {
     } catch (error) {
       console.error("Logout error", error);
     } finally {
-      router.replace("/login");
-      router.refresh();
+      window.location.replace(`/login?ts=${Date.now()}`);
     }
   }
 
@@ -60,7 +58,6 @@ export function DashboardApp({ user }: DashboardAppProps) {
   const showEstateTabs = isPrimary || isAdmin;
   const handleBookingCreated = () => {
     setBookingRefreshKey((prev) => prev + 1);
-    router.refresh();
   };
 
   return (

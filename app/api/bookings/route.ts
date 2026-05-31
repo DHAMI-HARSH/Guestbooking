@@ -21,9 +21,10 @@ async function resolveSessionUserId(
     .request()
     .input("ecode", ecode.trim().toUpperCase())
     .query(`
-      SELECT TOP 1 id
-      FROM Users
+      SELECT id
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+      LIMIT 1
     `);
 
   const row = result.recordset[0] as { id: number } | undefined;
@@ -163,7 +164,6 @@ export async function POST(request: NextRequest) {
         approval_status,
         estate_status
       )
-      OUTPUT INSERTED.*
       VALUES (
         @guest_name,
         @guest_email,
@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
         'PENDING_APPROVAL',
         'PENDING_ESTATE_REVIEW'
       )
+      RETURNING *
     `);
 
     return NextResponse.json(
@@ -304,14 +305,14 @@ export async function GET(request: NextRequest) {
       conditions.push(
         "(" +
           [
-            "CAST(b.id AS NVARCHAR(32)) LIKE @q_like",
-            "b.guest_name LIKE @q_like",
-            "b.guest_phone LIKE @q_like",
-            "b.guest_email LIKE @q_like",
-            "u.name LIKE @q_like",
-            "u.ecode LIKE @q_like",
-            "u.department LIKE @q_like",
-            "u.unit LIKE @q_like",
+            "CAST(b.id AS TEXT) ILIKE @q_like",
+            "b.guest_name ILIKE @q_like",
+            "b.guest_phone ILIKE @q_like",
+            "b.guest_email ILIKE @q_like",
+            "u.name ILIKE @q_like",
+            "u.ecode ILIKE @q_like",
+            "u.department ILIKE @q_like",
+            "u.unit ILIKE @q_like",
           ].join(" OR ") +
           ")",
       );
@@ -323,8 +324,8 @@ export async function GET(request: NextRequest) {
 
     const countResult = await req.query(`
       SELECT COUNT(*) AS total
-      FROM Bookings b
-      INNER JOIN Users u ON u.id = b.created_by
+      FROM bookings b
+      INNER JOIN users u ON u.id = b.created_by
       ${whereClause}
     `);
 
@@ -336,12 +337,11 @@ export async function GET(request: NextRequest) {
         u.name AS booking_owner_name,
         u.department AS booking_owner_department,
         u.ecode AS booking_owner_ecode
-      FROM Bookings b
-      INNER JOIN Users u ON u.id = b.created_by
+      FROM bookings b
+      INNER JOIN users u ON u.id = b.created_by
       ${whereClause}
       ORDER BY b.created_at DESC, b.id DESC
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
+      LIMIT @limit OFFSET @offset
     `);
 
     return NextResponse.json({

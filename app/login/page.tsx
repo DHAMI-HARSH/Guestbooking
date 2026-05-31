@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
 import { LoginForm } from "@/components/auth/login-form";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function LoginPage() {
   const session = await getServerSession();
   if (session) {

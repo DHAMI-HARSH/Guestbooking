@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
       SELECT
         department,
         COUNT(*) AS total,
-        SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active
-      FROM Users
+        SUM(CASE WHEN is_active THEN 1 ELSE 0 END) AS active
+      FROM users
       GROUP BY department
       ORDER BY total DESC, department ASC
     `);

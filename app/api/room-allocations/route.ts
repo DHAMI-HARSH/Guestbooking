@@ -13,9 +13,10 @@ async function resolveSessionUserId(
     .request()
     .input("ecode", ecode.trim().toUpperCase())
     .query(`
-      SELECT TOP 1 id
-      FROM Users
+      SELECT id
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+      LIMIT 1
     `);
 
   const row = result.recordset[0] as { id: number } | undefined;
@@ -74,8 +75,8 @@ export async function GET(request: NextRequest) {
           b.guest_name,
           b.estate_status,
           b.approval_status
-        FROM RoomAllocation ra
-        INNER JOIN Bookings b ON b.id = ra.booking_id
+        FROM roomallocation ra
+        INNER JOIN bookings b ON b.id = ra.booking_id
         WHERE ra.allocation_status = 'ALLOCATED'
           AND b.id = @booking_id
           ${auth.session.role === "EMPLOYEE" ? "AND b.created_by = @created_by" : ""}
@@ -97,8 +98,8 @@ export async function GET(request: NextRequest) {
           b.guest_name,
           b.estate_status,
           b.approval_status
-        FROM RoomAllocation ra
-        INNER JOIN Bookings b ON b.id = ra.booking_id
+        FROM roomallocation ra
+        INNER JOIN bookings b ON b.id = ra.booking_id
         WHERE ra.allocation_status = 'ALLOCATED'
           AND b.arrival_date <= @to
           AND b.departure_date >= @from
@@ -110,8 +111,8 @@ export async function GET(request: NextRequest) {
 
     const countResult = await req.query(`
       SELECT COUNT(*) AS total
-      FROM RoomAllocation ra
-      INNER JOIN Bookings b ON b.id = ra.booking_id
+      FROM roomallocation ra
+      INNER JOIN bookings b ON b.id = ra.booking_id
       WHERE ra.allocation_status = 'ALLOCATED'
         AND b.arrival_date <= @to
         AND b.departure_date >= @from
@@ -127,14 +128,13 @@ export async function GET(request: NextRequest) {
         b.guest_name,
         b.estate_status,
         b.approval_status
-      FROM RoomAllocation ra
-      INNER JOIN Bookings b ON b.id = ra.booking_id
+      FROM roomallocation ra
+      INNER JOIN bookings b ON b.id = ra.booking_id
       WHERE ra.allocation_status = 'ALLOCATED'
         AND b.arrival_date <= @to
         AND b.departure_date >= @from
       ORDER BY ra.room_number ASC, ra.id DESC
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
+      LIMIT @limit OFFSET @offset
     `);
 
     return NextResponse.json({

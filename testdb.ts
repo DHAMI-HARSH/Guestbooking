@@ -1,23 +1,18 @@
-import sql from "mssql";
-
-const config = {
-  server: "SRHUIT-24-0089\\SQLEXPRESS",
-  user: "sa",
-  password: "sst@12345",
-  database: "guesthouse",
-  // port: 1433,
-  options: {
-    encrypt: false,
-    trustServerCertificate: true,
-  },
-};
+import { Pool } from "pg";
 
 async function test() {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : undefined,
+  });
+
   try {
-    await sql.connect(config);
-    console.log("✅ DB Connected");
+    await pool.query("SELECT 1 AS ok");
+    console.log("DB Connected");
   } catch (err) {
-    console.error("❌ DB Error:", err);
+    console.error("DB Error:", err);
+  } finally {
+    await pool.end();
   }
 }
 

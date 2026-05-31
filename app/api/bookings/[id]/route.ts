@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
 import { getDbPool } from "@/lib/db";
 import { bookingUpdateSchema, calculateTotals } from "@/lib/validation";
 import { canManageBooking, requireRoles } from "@/lib/permissions";
@@ -39,16 +38,17 @@ function parseId(id: string) {
 }
 
 async function resolveSessionUserId(
-  pool: sql.ConnectionPool,
+  pool: Awaited<ReturnType<typeof getDbPool>>,
   ecode: string
 ): Promise<number | null> {
   const result = await pool
     .request()
     .input("ecode", ecode.trim().toUpperCase())
     .query(`
-      SELECT TOP 1 id
-      FROM Users
+      SELECT id
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+      LIMIT 1
     `);
 
   const row = result.recordset[0] as { id: number } | undefined;
@@ -90,16 +90,24 @@ export async function GET(
       .request()
       .input("booking_id", bookingId)
       .query(`
-        SELECT TOP 1 
+        SELECT
           b.*, 
           u.name AS booking_owner_name, 
           u.department AS booking_owner_department
-        FROM Bookings b
-        INNER JOIN Users u ON u.id = b.created_by
+        FROM bookings b
+        INNER JOIN users u ON u.id = b.created_by
         WHERE b.id = @booking_id
+        LIMIT 1
       `);
 
-    const booking = result.recordset[0];
+    const booking = result.recordset[0] as
+      | {
+          id: number;
+          created_by: number;
+          booking_owner_name: string;
+          booking_owner_department: string;
+        }
+      | undefined;
 
     if (!booking) {
       return NextResponse.json({ message: "Booking not found" }, { status: 404 });
@@ -170,9 +178,45 @@ export async function PUT(
     const bookingResult = await pool
       .request()
       .input("booking_id", bookingId)
-      .query(`SELECT TOP 1 * FROM Bookings WHERE id = @booking_id`);
+      .query(`SELECT * FROM bookings WHERE id = @booking_id LIMIT 1`);
 
-    const current = bookingResult.recordset[0];
+    const current = bookingResult.recordset[0] as
+      | {
+          arrival_date: string;
+          departure_date: string;
+          guest_name: string;
+          guest_email: string;
+          guest_phone: string;
+          guest_address: string;
+          guest_pincode: string;
+          guest_city: string;
+          guest_state: string;
+          meal_plan: "General" | "Special";
+          extra_bed: boolean;
+          purpose: "Official" | "Personal";
+          justification: string;
+          special_requests: string | null;
+          estimated_cost: number | null;
+          arrival_time: string;
+          departure_time: string;
+          stay_days: number;
+          created_by: number;
+          male_count: number;
+          female_count: number;
+          children_count: number;
+          services_required: string | null;
+          room_configuration: "Double Bed" | "Triple Bed" | "Twin Sharing" | "" | null;
+          room_selection: string | null;
+          booking_cost_center: string;
+          approval_status: string;
+          estate_status: string;
+          cancellation_remarks: string | null;
+          total_guests: number;
+          rooms_required: number;
+          guests: string | null;
+          food_reservations: string | null;
+        }
+      | undefined;
 
     if (!current) {
       return NextResponse.json({ message: "Booking not found" }, { status: 404 });
@@ -358,10 +402,10 @@ export async function PUT(
     }
 
     const updated = await req.query(`
-      UPDATE Bookings
+      UPDATE bookings
       SET ${updates.join(", ")}
-      OUTPUT INSERTED.*
       WHERE id = @id
+      RETURNING *
     `);
 
     const nextBooking = updated.recordset[0];
@@ -374,7 +418,7 @@ export async function PUT(
         .request()
         .input("booking_id", bookingId)
         .query(`
-          UPDATE RoomAllocation
+          UPDATE roomallocation
           SET allocation_status = 'RELEASED'
           WHERE booking_id = @booking_id
             AND allocation_status = 'ALLOCATED'

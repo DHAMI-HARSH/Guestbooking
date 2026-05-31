@@ -1,6 +1,4 @@
-IF COL_LENGTH('Bookings', 'food_reservations') IS NULL
-BEGIN
-  ALTER TABLE Bookings
-  ADD food_reservations NVARCHAR(MAX) NULL;
-END;
-GO
+-- Add food_reservations column to bookings table (PostgreSQL version)
+
+ALTER TABLE bookings
+ADD COLUMN IF NOT EXISTS food_reservations TEXT NULL;

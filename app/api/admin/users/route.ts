@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { getDbPool } from "@/lib/db";
 import { requireRoles } from "@/lib/permissions";
 import { adminUserSchema } from "@/lib/validation";
@@ -18,9 +19,10 @@ async function resolveSessionUserId(
     .request()
     .input("ecode", normalizeEcode(ecode))
     .query(`
-      SELECT TOP 1 id
-      FROM Users
+      SELECT id
+      FROM users
       WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+      LIMIT 1
     `);
 
   const row = result.recordset[0] as { id: number } | undefined;
@@ -57,12 +59,12 @@ export async function GET(request: NextRequest) {
       conditions.push(
         "(" +
           [
-            "CAST(id AS NVARCHAR(32)) LIKE @q_like",
-            "ecode LIKE @q_like",
-            "name LIKE @q_like",
-            "department LIKE @q_like",
-            "unit LIKE @q_like",
-            "role LIKE @q_like",
+            "CAST(id AS TEXT) ILIKE @q_like",
+            "ecode ILIKE @q_like",
+            "name ILIKE @q_like",
+            "department ILIKE @q_like",
+            "unit ILIKE @q_like",
+            "role ILIKE @q_like",
           ].join(" OR ") +
           ")",
       );
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     const countResult = await req.query(`
       SELECT COUNT(*) AS total
-      FROM Users
+      FROM users
       ${whereClause}
     `);
 
@@ -89,11 +91,10 @@ export async function GET(request: NextRequest) {
         is_active,
         created_by_admin_id,
         created_at
-      FROM Users
+      FROM users
       ${whereClause}
       ORDER BY created_at DESC, id DESC
-      OFFSET @offset ROWS
-      FETCH NEXT @limit ROWS ONLY
+      LIMIT @limit OFFSET @offset
     `);
 
     return NextResponse.json({
@@ -141,9 +142,10 @@ export async function POST(request: NextRequest) {
       .request()
       .input("ecode", ecode)
       .query(`
-        SELECT TOP 1 id
-        FROM Users
+        SELECT id
+        FROM users
         WHERE UPPER(LTRIM(RTRIM(ecode))) = @ecode
+        LIMIT 1
       `);
 
     if (exists.recordset.length > 0) {
@@ -159,14 +161,14 @@ export async function POST(request: NextRequest) {
     req.input("department", parsed.data.department.trim());
     req.input("unit", parsed.data.unit ? parsed.data.unit.trim() : null);
     req.input("role", parsed.data.role);
-    req.input("password_hash", parsed.data.password);
+    req.input("password_hash", await bcrypt.hash(parsed.data.password, 10));
     req.input("is_active", parsed.data.is_active ?? true);
     req.input("created_by_admin_id", currentAdminId);
 
     const result = await req.query(`
-      INSERT INTO Users (ecode, name, unit, department, role, password_hash, is_active, created_by_admin_id)
-      OUTPUT INSERTED.id, INSERTED.ecode, INSERTED.name, INSERTED.department, INSERTED.unit, INSERTED.role, INSERTED.is_active, INSERTED.created_by_admin_id
+      INSERT INTO users (ecode, name, unit, department, role, password_hash, is_active, created_by_admin_id)
       VALUES (@ecode, @name, @unit, @department, @role, @password_hash, @is_active, @created_by_admin_id)
+      RETURNING id, ecode, name, department, unit, role, is_active, created_by_admin_id
     `);
 
     return NextResponse.json({

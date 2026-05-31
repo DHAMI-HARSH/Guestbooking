@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Building2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function LoginForm() {
-  const router = useRouter();
   const [ecode, setEcode] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,6 +22,7 @@ export function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({ ecode, password }),
       });
 
@@ -32,8 +31,7 @@ export function LoginForm() {
         throw new Error(data.message || "Login failed");
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      window.location.replace(`/dashboard?ts=${Date.now()}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
