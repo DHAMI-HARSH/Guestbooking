@@ -2,16 +2,15 @@ import type { DbPool } from "@/lib/db";
 
 type LoginSecurityRow = {
   subject_key: string;
-  ecode: string;
   ip_address: string;
-  failed_attempts: number;
+  attempt_count: number;
   warning_count: number;
   banned_until: Date | null;
 };
 
-const BAN_DURATION_MS = 60 * 1000;
-const FAILURES_PER_WARNING = 5;
+const ATTEMPTS_PER_WARNING = 5;
 const WARNINGS_PER_BAN = 3;
+const BAN_DURATION_MS = 60 * 1000;
 
 let ensureTablePromise: Promise<void> | null = null;
 
@@ -20,8 +19,8 @@ export function normalizeClientIp(value: string | null) {
   return value.split(",")[0]?.trim() || "unknown";
 }
 
-export function buildLoginSubjectKey(ecode: string, ipAddress: string) {
-  return `${ipAddress}:${ecode}`;
+export function buildLoginSubjectKey(ipAddress: string) {
+  return ipAddress;
 }
 
 export async function ensureLoginSecurityTable(pool: DbPool) {
@@ -29,14 +28,33 @@ export async function ensureLoginSecurityTable(pool: DbPool) {
     ensureTablePromise = (async () => {
       await pool.request().query(`
         CREATE TABLE IF NOT EXISTS login_security (
-          subject_key VARCHAR(320) PRIMARY KEY,
-          ecode VARCHAR(20) NOT NULL,
+          subject_key VARCHAR(128) PRIMARY KEY,
           ip_address VARCHAR(128) NOT NULL,
-          failed_attempts INT NOT NULL DEFAULT 0,
+          attempt_count INT NOT NULL DEFAULT 0,
           warning_count INT NOT NULL DEFAULT 0,
           banned_until TIMESTAMPTZ NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS ip_address VARCHAR(128) NOT NULL DEFAULT 'unknown'
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS warning_count INT NOT NULL DEFAULT 0
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS banned_until TIMESTAMPTZ NULL
+      `);
+      await pool.request().query(`
+        ALTER TABLE login_security
+          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       `);
     })().catch((error) => {
       ensureTablePromise = null;
@@ -56,9 +74,8 @@ export async function getLoginSecurityState(pool: DbPool, subjectKey: string) {
     .query(`
       SELECT
         subject_key,
-        ecode,
         ip_address,
-        failed_attempts,
+        attempt_count,
         warning_count,
         banned_until
       FROM login_security
@@ -81,21 +98,20 @@ export async function clearLoginSecurityState(pool: DbPool, subjectKey: string) 
     `);
 }
 
-export async function recordFailedLoginAttempt(
+export async function recordLoginAttempt(
   pool: DbPool,
-  input: { subjectKey: string; ecode: string; ipAddress: string },
+  input: { subjectKey: string; ipAddress: string },
 ) {
   await ensureLoginSecurityTable(pool);
 
   const current = await getLoginSecurityState(pool, input.subjectKey);
   const now = new Date();
-  const currentlyBanned = current?.banned_until ? new Date(current.banned_until) > now : false;
+  const currentlyBanned = current?.banned_until ? new Date(current.banned_until).getTime() > now.getTime() : false;
 
-  const failedAttempts = (current?.failed_attempts ?? 0) + 1;
-  let warningCount = current?.warning_count ?? 0;
-  let bannedUntil: Date | null = current?.banned_until ?? null;
+  const nextAttemptCount = (current?.attempt_count ?? 0) + 1;
+  let nextWarningCount = current?.warning_count ?? 0;
+  let bannedUntil = current?.banned_until ?? null;
   let warningMessage: string | null = null;
-  let isBanned = currentlyBanned;
 
   if (currentlyBanned && bannedUntil) {
     return {
@@ -106,55 +122,50 @@ export async function recordFailedLoginAttempt(
     };
   }
 
-  if (failedAttempts >= FAILURES_PER_WARNING) {
-    warningCount += 1;
-    warningMessage = `Warning ${warningCount}/${WARNINGS_PER_BAN}: ${FAILURES_PER_WARNING} failed login attempts detected.`;
+  if (nextAttemptCount % ATTEMPTS_PER_WARNING === 0) {
+    nextWarningCount += 1;
+    warningMessage = `Warning ${nextWarningCount}/${WARNINGS_PER_BAN}: ${ATTEMPTS_PER_WARNING} sign-in clicks detected.`;
   }
 
-  if (warningCount >= WARNINGS_PER_BAN) {
+  if (nextWarningCount >= WARNINGS_PER_BAN) {
     bannedUntil = new Date(now.getTime() + BAN_DURATION_MS);
-    warningCount = 0;
-    isBanned = true;
+    nextWarningCount = 0;
   }
 
   await pool
     .request()
     .input("subject_key", input.subjectKey)
-    .input("ecode", input.ecode)
     .input("ip_address", input.ipAddress)
-    .input("failed_attempts", warningCount === 0 || isBanned ? 0 : failedAttempts % FAILURES_PER_WARNING)
-    .input("warning_count", warningCount)
+    .input("attempt_count", bannedUntil ? 0 : nextAttemptCount)
+    .input("warning_count", nextWarningCount)
     .input("banned_until", bannedUntil)
     .query(`
       INSERT INTO login_security (
         subject_key,
-        ecode,
         ip_address,
-        failed_attempts,
+        attempt_count,
         warning_count,
         banned_until,
         updated_at
       )
       VALUES (
         @subject_key,
-        @ecode,
         @ip_address,
-        @failed_attempts,
+        @attempt_count,
         @warning_count,
         @banned_until,
         CURRENT_TIMESTAMP
       )
       ON CONFLICT (subject_key)
       DO UPDATE SET
-        ecode = EXCLUDED.ecode,
         ip_address = EXCLUDED.ip_address,
-        failed_attempts = EXCLUDED.failed_attempts,
+        attempt_count = EXCLUDED.attempt_count,
         warning_count = EXCLUDED.warning_count,
         banned_until = EXCLUDED.banned_until,
         updated_at = CURRENT_TIMESTAMP
     `);
 
-  if (isBanned && bannedUntil) {
+  if (bannedUntil) {
     return {
       status: "banned" as const,
       bannedUntil,
@@ -163,9 +174,32 @@ export async function recordFailedLoginAttempt(
     };
   }
 
+  if (warningMessage) {
+    return {
+      status: "warning" as const,
+      warningMessage,
+      warningCount: nextWarningCount,
+    };
+  }
+
   return {
-    status: "warning" as const,
-    warningCount,
-    warningMessage,
+    status: "tracking" as const,
   };
+}
+
+export async function resetLoginSecurityState(pool: DbPool, subjectKey: string) {
+  await ensureLoginSecurityTable(pool);
+
+  await pool
+    .request()
+    .input("subject_key", subjectKey)
+    .query(`
+      UPDATE login_security
+      SET
+        attempt_count = 0,
+        warning_count = 0,
+        banned_until = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE subject_key = @subject_key
+    `);
 }

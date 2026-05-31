@@ -38,7 +38,7 @@ export async function verifyTurnstileToken(options: {
   const payload = new URLSearchParams();
   payload.set("secret", secret);
   payload.set("response", options.token);
-  if (options.remoteIp) {
+  if (options.remoteIp && options.remoteIp !== "unknown") {
     payload.set("remoteip", options.remoteIp);
   }
 

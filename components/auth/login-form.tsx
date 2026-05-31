@@ -29,6 +29,7 @@ export function LoginForm() {
   const [ecode, setEcode] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [turnstileScriptLoaded, setTurnstileScriptLoaded] = useState(!turnstileEnabled);
   const [turnstileReady, setTurnstileReady] = useState(!turnstileEnabled);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -49,7 +50,13 @@ export function LoginForm() {
   }
 
   useEffect(() => {
-    if (!turnstileEnabled || !widgetContainerRef.current || widgetIdRef.current || !window.turnstile) {
+    if (
+      !turnstileEnabled ||
+      !turnstileScriptLoaded ||
+      !widgetContainerRef.current ||
+      widgetIdRef.current ||
+      !window.turnstile
+    ) {
       return;
     }
 
@@ -58,7 +65,6 @@ export function LoginForm() {
       action: "login",
       execution: "execute",
       appearance: "execute",
-      size: "invisible",
       callback: (token: string) => {
         resolveTokenRef.current?.(token);
         resolveTokenRef.current = null;
@@ -89,7 +95,7 @@ export function LoginForm() {
       resolveTokenRef.current = null;
       rejectTokenRef.current = null;
     };
-  }, [turnstileEnabled, turnstileSiteKey]);
+  }, [turnstileEnabled, turnstileScriptLoaded, turnstileSiteKey]);
 
   function getCaptchaToken() {
     if (!turnstileEnabled) {
@@ -140,6 +146,9 @@ export function LoginForm() {
         if (typeof data.warning === "string" && data.warning) {
           setNotice(data.warning);
         }
+        if (Array.isArray(data.captchaErrors) && data.captchaErrors.length > 0) {
+          setNotice(`Captcha error: ${data.captchaErrors.join(", ")}`);
+        }
 
         throw new Error(data.message || "Login failed");
       }
@@ -163,7 +172,10 @@ export function LoginForm() {
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
-          onLoad={() => setTurnstileReady(Boolean(widgetIdRef.current))}
+          onLoad={() => {
+            setTurnstileScriptLoaded(true);
+            setTurnstileReady(Boolean(widgetIdRef.current));
+          }}
         />
       ) : null}
 

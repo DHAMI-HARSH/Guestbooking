@@ -4,12 +4,12 @@ import { getDbPool } from "@/lib/db";
 import { getSessionCookieName, signSessionToken } from "@/lib/auth";
 import type { SessionUser } from "@/lib/types";
 import {
-  buildLoginSubjectKey,
-  clearLoginSecurityState,
   ensureLoginSecurityTable,
   getLoginSecurityState,
   normalizeClientIp,
-  recordFailedLoginAttempt,
+  recordLoginAttempt,
+  resetLoginSecurityState,
+  buildLoginSubjectKey,
 } from "@/lib/login-security";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 
@@ -68,21 +68,18 @@ export async function POST(request: Request) {
         : null;
 
     if (!ecode || !password) {
-      return NextResponse.json(
-        { message: "Invalid input: ecode and password are required" },
-        { status: 400 }
-      );
+      // keep going so the submit click still counts toward the security threshold
     }
 
     const pool = await getDbPool();
     await ensureLoginSecurityTable(pool);
 
     const clientIp = normalizeClientIp(
-      request.headers.get("cf-connecting-ip") ||
+        request.headers.get("cf-connecting-ip") ||
         request.headers.get("x-forwarded-for") ||
         request.headers.get("x-real-ip"),
     );
-    const subjectKey = buildLoginSubjectKey(ecode, clientIp);
+    const subjectKey = buildLoginSubjectKey(clientIp);
     const securityState = await getLoginSecurityState(pool, subjectKey);
 
     if (securityState?.banned_until && new Date(securityState.banned_until).getTime() > Date.now()) {
@@ -100,6 +97,39 @@ export async function POST(request: Request) {
       );
     }
 
+    const loginAttempt = await recordLoginAttempt(pool, {
+      subjectKey,
+      ipAddress: clientIp,
+    });
+
+    if (loginAttempt.status === "banned") {
+      return NextResponse.json(
+        {
+          message: "Too many sign-in clicks. Try again in 1 minute.",
+          retryAfterSeconds: loginAttempt.retryAfterSeconds,
+          warning: loginAttempt.warningMessage,
+        },
+        { status: 429 }
+      );
+    }
+
+    if (loginAttempt.status === "warning") {
+      return NextResponse.json(
+        {
+          message: loginAttempt.warningMessage || "Warning: repeated sign-in clicks detected.",
+          warning: loginAttempt.warningMessage,
+        },
+        { status: 429 }
+      );
+    }
+
+    if (!ecode || !password) {
+      return NextResponse.json(
+        { message: "Invalid input: ecode and password are required" },
+        { status: 400 }
+      );
+    }
+
     const turnstileResult = await verifyTurnstileToken({
       token: turnstileToken || "",
       remoteIp: clientIp,
@@ -107,6 +137,10 @@ export async function POST(request: Request) {
     });
 
     if (!turnstileResult.success) {
+      console.warn("[auth/login] Captcha verification failed", {
+        ecode,
+        captchaErrors: "errors" in turnstileResult ? turnstileResult.errors : [],
+      });
       return NextResponse.json(
         {
           message: "Captcha verification failed. Please try again.",
@@ -145,66 +179,26 @@ export async function POST(request: Request) {
       | undefined;
 
     if (!user || user.is_active === false) {
-      const loginState = await recordFailedLoginAttempt(pool, {
-        subjectKey,
-        ecode,
-        ipAddress: clientIp,
-      });
-
       console.warn("[auth/login] Invalid credentials", {
         ecode,
         userFound: false,
       });
 
-      if (loginState.status === "banned") {
-        return NextResponse.json(
-          {
-            message: "Too many failed attempts. Try again in 1 minute.",
-            retryAfterSeconds: loginState.retryAfterSeconds,
-            warning: loginState.warningMessage,
-          },
-          { status: 429 }
-        );
-      }
-
       return NextResponse.json(
-        {
-          message: "Invalid credentials",
-          warning: loginState.warningMessage,
-        },
+        { message: "Invalid credentials" },
         { status: 401 }
       );
     }
 
     const validPassword = await matchesPassword(user.password_hash, password);
     if (!validPassword) {
-      const loginState = await recordFailedLoginAttempt(pool, {
-        subjectKey,
-        ecode,
-        ipAddress: clientIp,
-      });
-
       console.warn("[auth/login] Invalid credentials", {
         ecode,
         userFound: Boolean(user),
       });
 
-      if (loginState.status === "banned") {
-        return NextResponse.json(
-          {
-            message: "Too many failed attempts. Try again in 1 minute.",
-            retryAfterSeconds: loginState.retryAfterSeconds,
-            warning: loginState.warningMessage,
-          },
-          { status: 429 }
-        );
-      }
-
       return NextResponse.json(
-        {
-          message: "Invalid credentials",
-          warning: loginState.warningMessage,
-        },
+        { message: "Invalid credentials" },
         { status: 401 }
       );
     }
@@ -220,7 +214,7 @@ export async function POST(request: Request) {
 
     const token = await signSessionToken(sessionUser);
 
-    await clearLoginSecurityState(pool, subjectKey);
+    await resetLoginSecurityState(pool, subjectKey);
 
     const response = NextResponse.json({
       message: "Login success",
