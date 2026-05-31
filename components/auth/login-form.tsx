@@ -103,11 +103,12 @@ export function LoginForm() {
     }
 
     const widgetId = widgetIdRef.current;
-    if (!widgetId || !window.turnstile) {
+    const turnstile = window.turnstile;
+    if (!widgetId || !turnstile) {
       return Promise.reject(new Error("Captcha is still loading. Please try again in a moment."));
     }
 
-    const existingToken = window.turnstile.getResponse(widgetId);
+    const existingToken = turnstile.getResponse(widgetId);
     if (existingToken) {
       return Promise.resolve(existingToken);
     }
@@ -115,7 +116,7 @@ export function LoginForm() {
     return new Promise<string>((resolve, reject) => {
       resolveTokenRef.current = resolve;
       rejectTokenRef.current = reject;
-      window.turnstile.execute(widgetId);
+      turnstile.execute(widgetId);
     });
   }
 
