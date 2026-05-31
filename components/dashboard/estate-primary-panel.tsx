@@ -62,7 +62,11 @@ export function EstatePrimaryPanel() {
     void loadBookings();
   }, []);
 
-  async function decide(bookingId: number, approvalStatus: "APPROVED" | "REJECTED") {
+  async function decide(
+    bookingId: number,
+    approvalStatus: "APPROVED" | "REJECTED",
+    cancellationRemarks?: string,
+  ) {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -73,7 +77,7 @@ export function EstatePrimaryPanel() {
       };
 
       if (approvalStatus === "REJECTED") {
-        payload.cancellation_remarks = remarks || "Rejected by estate manager.";
+        payload.cancellation_remarks = cancellationRemarks || remarks || "Rejected by estate manager.";
       }
 
       const res = await fetch(`/api/bookings/${bookingId}`, {
@@ -97,6 +101,10 @@ export function EstatePrimaryPanel() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function canDecide(booking: BookingWithOwner) {
+    return booking.approval_status === "PENDING_APPROVAL";
   }
 
   useEffect(() => {
@@ -246,9 +254,32 @@ export function EstatePrimaryPanel() {
                             setSelected(booking);
                             setRoomHighlightId(booking.id);
                           }}
-                        >
+                          >
                           <BedDouble className="h-4 w-4" />
                         </Button>
+                        {canDecide(booking) ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => void decide(booking.id, "APPROVED")}
+                              disabled={loading}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                setSelected(booking);
+                                void decide(booking.id, "REJECTED", remarks || "Rejected by estate manager.");
+                              }}
+                              disabled={loading}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -326,7 +357,6 @@ export function EstatePrimaryPanel() {
                                 <p><span className="font-medium">Approval:</span> <ApprovalBadge status={selected.approval_status} /></p>
                                 <p><span className="font-medium">Estate:</span> <EstateBadge status={selected.estate_status} /></p>
                               </div>
-
                               {selected.approval_status === "PENDING_APPROVAL" ? (
                                 <div className="space-y-4">
                                   <div className="space-y-1.5">
@@ -338,19 +368,6 @@ export function EstatePrimaryPanel() {
                                       placeholder="Optional remarks for rejection"
                                       rows={3}
                                     />
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button onClick={() => void decide(selected.id, "APPROVED")} disabled={loading}>
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      onClick={() => void decide(selected.id, "REJECTED")}
-                                      disabled={loading}
-                                    >
-                                      Reject
-                                    </Button>
                                   </div>
                                 </div>
                               ) : null}

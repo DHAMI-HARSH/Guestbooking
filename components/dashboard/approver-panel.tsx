@@ -36,16 +36,6 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
   const [decisionsLoading, setDecisionsLoading] = useState(false);
   const [decisionsError, setDecisionsError] = useState<string | null>(null);
   const [showDecisions, setShowDecisions] = useState(false);
-  const [recentApprovals, setRecentApprovals] = useState<
-    Array<{
-      id: number;
-      booking_id: number;
-      decision: "Approved" | "Rejected";
-      decided_at: string;
-      guest_name: string;
-      arrival_date: string;
-    }>
-  >([]);
   const [remarks, setRemarks] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -126,17 +116,6 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
     }
   }, []);
 
-  const loadRecentApprovals = useCallback(async () => {
-    try {
-      const res = await fetch("/api/approval?limit=8");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to load approvals");
-      setRecentApprovals(data.approvals ?? []);
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
   const loadDecisions = useCallback(async () => {
     setDecisionsLoading(true);
     setDecisionsError(null);
@@ -159,8 +138,7 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
 
   useEffect(() => {
     void loadPending();
-    void loadRecentApprovals();
-  }, [loadPending, loadRecentApprovals]);
+  }, [loadPending]);
 
   const detailBooking = selected ?? decidedSelected;
 
@@ -589,31 +567,6 @@ export function ApproverPanel({ onChanged }: ApproverPanelProps) {
           </div>
         ) : null}
 
-        <div className="rounded-lg border bg-secondary/20 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">Recent Decisions</p>
-            <Button variant="ghost" size="sm" onClick={loadRecentApprovals}>
-              Refresh
-            </Button>
-          </div>
-          {recentApprovals.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No approvals yet.</p>
-          ) : (
-            <div className="mt-2 grid gap-2 text-sm">
-              {recentApprovals.map((item) => (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-white px-3 py-2">
-                  <div>
-                    <p className="font-medium">#{item.booking_id} - {item.guest_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Arrival {formatDisplayDate(item.arrival_date)} - {formatDisplayDate(item.decided_at)}
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold">{item.decision}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </CardContent>
     </Card>
   );
