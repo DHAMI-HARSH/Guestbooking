@@ -59,7 +59,7 @@ npm install
 copy .env.example .env.local
 ```
 
-3. Update `.env.local` with your PostgreSQL connection:
+3. Update `.env.local` with your PostgreSQL connection string:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/guestbooking
@@ -108,7 +108,8 @@ npm run dev
 ## Deployment Notes
 
 - Use a managed PostgreSQL database or Supabase for easiest deployment.
-- If the app is hosted on Vercel, make sure the Postgres instance allows remote connections from your deployment.
+- If the app is hosted on Vercel, set `DATABASE_URL` and `DB_SSL=true` in the Vercel Environment Variables screen.
+- Avoid mixing old `DB_HOST` / `PGHOST` values with `DATABASE_URL`; the app now prefers `DATABASE_URL` first.
 - Keep `DATABASE_URL` and `JWT_SECRET` in environment variables, never in source control.
 
 ## Folder Structure
