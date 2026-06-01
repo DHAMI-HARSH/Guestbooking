@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PaginationBar } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToastBanner, type ToastTone } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ApprovalBadge, EstateBadge } from "@/components/dashboard/shared";
@@ -33,10 +34,10 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
   const [bookingId, setBookingId] = useState("");
   const [bookings, setBookings] = useState<BookingWithOwner[]>([]);
   const [editing, setEditing] = useState<BookingWithOwner | null>(null);
-  const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ title: string; description?: string; tone?: ToastTone } | null>(null);
 
   const filterFields: TableFilterField<BookingWithOwner>[] = [
     { key: "guest_name", label: "Guest", accessor: (booking) => booking.guest_name },
@@ -103,7 +104,6 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
       if (!res.ok) throw new Error(data.message || "Update failed");
       setMessage("Booking updated successfully.");
       setEditing(null);
-      setRemarks("");
       await searchBookings();
       onChanged?.();
     } catch (err) {
@@ -119,16 +119,17 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
     setMessage(null);
     try {
       const res = await fetch(`/api/bookings/${bookingId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approval_status: "CANCELLED",
-          cancellation_remarks: remarks || "Cancelled by booking owner.",
-        }),
+        method: "DELETE",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Cancellation failed");
-      setMessage("Booking cancelled.");
+      setMessage("Booking cancelled successfully.");
+      setToast({
+        title: "Booking cancelled",
+        description: "The booking was removed from the database and the list was refreshed.",
+        tone: "success",
+      });
+      setEditing(null);
       await searchBookings();
       onChanged?.();
     } catch (err) {
@@ -158,6 +159,12 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
     void searchBookings();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only when requested
   }, [refreshKey]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   return (
     <Card className="overflow-hidden border-slate-200/80 shadow-sm">
@@ -376,15 +383,13 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
         </div>
 
         <PaginationBar pagination={table.pagination} onPageChange={table.setPage} loading={loading} />
-
-        <div className="space-y-1.5">
-          <Label>Cancellation Remarks</Label>
-          <Textarea
-            placeholder="Enter remarks for cancellation, if needed."
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-          />
-        </div>
+        <ToastBanner
+          open={Boolean(toast)}
+          title={toast?.title || ""}
+          description={toast?.description}
+          tone={toast?.tone}
+          onClose={() => setToast(null)}
+        />
 
         {editing ? (
           <div className="rounded-2xl border bg-secondary/20 p-4">

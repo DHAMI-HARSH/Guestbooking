@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToastBanner, type ToastTone } from "@/components/ui/toast";
 import { Textarea } from "@/components/ui/textarea";
 
 const serviceOptions = ["Room", "Breakfast", "Lunch", "Dinner"] as const;
@@ -138,6 +139,9 @@ export function BookingForm({ onCreated }: BookingFormProps) {
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [showSpecialRequests, setShowSpecialRequests] = useState(false);
   const [showFoodReservations, setShowFoodReservations] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [submitConfirmation, setSubmitConfirmation] = useState<"YES" | "NO" | "">("");
+  const [toast, setToast] = useState<{ title: string; description?: string; tone?: ToastTone } | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
   const stepLabels = [
@@ -152,7 +156,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
   const isLastStep = currentStep === stepLabels.length - 1;
   const reviewStepIndex = stepLabels.length - 1;
 
-  const validateStep = (step: number) => {
+  const validateStep = useCallback((step: number) => {
     if (step === 0) {
       const hasBasic = [
         form.guest_name,
@@ -203,26 +207,27 @@ export function BookingForm({ onCreated }: BookingFormProps) {
     }
 
     return true;
+  }, [form]);
+
+  const isReviewReady = useMemo(() => {
+    return (
+      validateStep(0) &&
+      validateStep(1) &&
+      validateStep(2) &&
+      validateStep(3)
+    );
+  }, [validateStep]);
+
+  const canNavigateToStep = (target: number) => {
+    if (target === reviewStepIndex) return isReviewReady;
+    return true;
   };
-const isReviewReady = useMemo(() => {
-  return (
-    validateStep(0) &&
-    validateStep(1) &&
-    validateStep(2) &&
-    validateStep(3)
-  );
-}, [form]);
 
-const canNavigateToStep = (target: number) => {
-  if (target === reviewStepIndex) return isReviewReady;
-  return true;
-};
-
-useEffect(() => {
-  if (currentStep === reviewStepIndex && !isReviewReady) {
-    setCurrentStep(reviewStepIndex - 1);
-  }
-}, [currentStep, reviewStepIndex, isReviewReady]);
+  useEffect(() => {
+    if (currentStep === reviewStepIndex && !isReviewReady) {
+      setCurrentStep(reviewStepIndex - 1);
+    }
+  }, [currentStep, reviewStepIndex, isReviewReady]);
 
   const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
   const maxArrivalStr = useMemo(() => format(addMonths(new Date(), 1), "yyyy-MM-dd"), []);
@@ -350,6 +355,12 @@ useEffect(() => {
 
     return () => clearTimeout(timer);
   }, [form.guest_pincode]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   function clearFieldError(field: string) {
     setFieldErrors((prev) => {
@@ -537,8 +548,7 @@ useEffect(() => {
     }));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitBooking() {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -587,17 +597,33 @@ useEffect(() => {
         }
         throw new Error(firstFieldError || data.detail || data.message || "Could not save booking");
       }
-      setMessage("Booking submitted and marked as PENDING_APPROVAL.");
+      setMessage("Booking submitted successfully and marked as PENDING_APPROVAL.");
+      setToast({
+        title: "Booking submitted successfully",
+        description: "Your booking is now marked as pending approval.",
+        tone: "success",
+      });
       setForm(initialState);
+      setCurrentStep(0);
       setEstimatedCost(null);
       setPincodeStatus(null);
       setShowSpecialRequests(false);
+      setShowFoodReservations(false);
+      setShowSubmitConfirm(false);
+      setSubmitConfirmation("");
       onCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit booking");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading || showSubmitConfirm) return;
+    setSubmitConfirmation("");
+    setShowSubmitConfirm(true);
   }
 
   return (
@@ -1346,6 +1372,74 @@ useEffect(() => {
         </div>
         </form>
       </CardContent>
+      {showSubmitConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-xl rounded-2xl border bg-white p-6 shadow-2xl">
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-slate-900">Confirm booking submission</p>
+              <p className="text-sm text-slate-600">
+                Please confirm that you have reviewed the booking and all of the details are correct before submitting.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-800">
+                <input
+                  type="radio"
+                  name="booking-confirmation"
+                  className="mt-1 h-4 w-4 accent-sky-600"
+                  checked={submitConfirmation === "YES"}
+                  onChange={() => setSubmitConfirmation("YES")}
+                />
+                <span>I have carefully reviewed details and all of the details are correct.</span>
+              </label>
+              <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm text-slate-600">
+                <input
+                  type="radio"
+                  name="booking-confirmation"
+                  className="mt-1 h-4 w-4 accent-sky-600"
+                  checked={submitConfirmation === "NO"}
+                  onChange={() => setSubmitConfirmation("NO")}
+                />
+                <span>No, let me go back and review the form again.</span>
+              </label>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowSubmitConfirm(false);
+                  setSubmitConfirmation("");
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCurrentStep(reviewStepIndex);
+                  setShowSubmitConfirm(false);
+                  setSubmitConfirmation("");
+                }}
+                disabled={loading}
+              >
+                Review Again
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void submitBooking()}
+                disabled={loading || submitConfirmation !== "YES"}
+              >
+                {loading ? "Submitting..." : "Confirm Submit"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showFoodReservations ? (
         <div className="gh-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="gh-scale-in w-full max-w-5xl rounded-lg border bg-white shadow-lg">
@@ -1474,6 +1568,13 @@ useEffect(() => {
           </div>
         </div>
       ) : null}
+      <ToastBanner
+        open={Boolean(toast)}
+        title={toast?.title || ""}
+        description={toast?.description}
+        tone={toast?.tone}
+        onClose={() => setToast(null)}
+      />
     </Card>
   );
 }

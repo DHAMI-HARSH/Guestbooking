@@ -440,3 +440,94 @@ export async function PUT(
     );
   }
 }
+
+/* ---------------- DELETE BOOKING ---------------- */
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const auth = await requireRoles(request, bookingRoles);
+
+  if (!auth.authorized || !auth.session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const bookingId = parseId(params.id);
+
+  if (!bookingId) {
+    return NextResponse.json({ message: "Invalid booking id" }, { status: 400 });
+  }
+
+  try {
+    const pool = await getDbPool();
+    const currentUserId = await resolveSessionUserId(pool, auth.session.ecode);
+
+    if (!currentUserId) {
+      return NextResponse.json(
+        { message: "Session user no longer exists. Please login again." },
+        { status: 401 }
+      );
+    }
+
+    const effectiveSession = { ...auth.session, id: currentUserId };
+
+    const bookingResult = await pool
+      .request()
+      .input("booking_id", bookingId)
+      .query(`SELECT id, created_by FROM bookings WHERE id = @booking_id LIMIT 1`);
+
+    const current = bookingResult.recordset[0] as
+      | {
+          id: number;
+          created_by: number;
+        }
+      | undefined;
+
+    if (!current) {
+      return NextResponse.json({ message: "Booking not found" }, { status: 404 });
+    }
+
+    if (!canManageBooking(effectiveSession, current.created_by)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+
+    const transaction = pool.transaction();
+    await transaction.begin();
+
+    try {
+      await transaction
+        .request()
+        .input("booking_id", bookingId)
+        .query(`DELETE FROM approvals WHERE booking_id = @booking_id`);
+
+      await transaction
+        .request()
+        .input("booking_id", bookingId)
+        .query(`DELETE FROM roomallocation WHERE booking_id = @booking_id`);
+
+      const deleted = await transaction
+        .request()
+        .input("booking_id", bookingId)
+        .query(`DELETE FROM bookings WHERE id = @booking_id RETURNING id`);
+
+      await transaction.commit();
+
+      return NextResponse.json({
+        message: "Booking cancelled and removed from database",
+        booking: deleted.recordset[0] ?? { id: bookingId },
+      });
+    } catch (deleteError) {
+      await transaction.rollback();
+      throw deleteError;
+    }
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message: "Failed to delete booking",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}
