@@ -5,7 +5,6 @@ import { getSessionCookieName, signSessionToken } from "@/lib/auth";
 import type { SessionUser } from "@/lib/types";
 import {
   ensureLoginSecurityTable,
-  getLoginSecurityState,
   normalizeClientIp,
   recordLoginAttempt,
   resetLoginSecurityState,
@@ -67,62 +66,8 @@ export async function POST(request: Request) {
         ? ((payload as { "cf-turnstile-response": string })["cf-turnstile-response"] as string)
         : null;
 
-    if (!ecode || !password) {
-      // keep going so the submit click still counts toward the security threshold
-    }
-
     const pool = await getDbPool();
     await ensureLoginSecurityTable(pool);
-
-    const clientIp = normalizeClientIp(
-        request.headers.get("cf-connecting-ip") ||
-        request.headers.get("x-forwarded-for") ||
-        request.headers.get("x-real-ip"),
-    );
-    const subjectKey = buildLoginSubjectKey(clientIp);
-    const securityState = await getLoginSecurityState(pool, subjectKey);
-
-    if (securityState?.banned_until && new Date(securityState.banned_until).getTime() > Date.now()) {
-      const retryAfterSeconds = Math.max(
-        1,
-        Math.ceil((new Date(securityState.banned_until).getTime() - Date.now()) / 1000),
-      );
-
-      return NextResponse.json(
-        {
-          message: `Too many failed attempts. Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`,
-          retryAfterSeconds,
-        },
-        { status: 429 }
-      );
-    }
-
-    const loginAttempt = await recordLoginAttempt(pool, {
-      subjectKey,
-      ipAddress: clientIp,
-      ecode,
-    });
-
-    if (loginAttempt.status === "banned") {
-      return NextResponse.json(
-        {
-          message: "Too many sign-in clicks. Try again in 1 minute.",
-          retryAfterSeconds: loginAttempt.retryAfterSeconds,
-          warning: loginAttempt.warningMessage,
-        },
-        { status: 429 }
-      );
-    }
-
-    if (loginAttempt.status === "warning") {
-      return NextResponse.json(
-        {
-          message: loginAttempt.warningMessage || "Warning: repeated sign-in clicks detected.",
-          warning: loginAttempt.warningMessage,
-        },
-        { status: 429 }
-      );
-    }
 
     if (!ecode || !password) {
       return NextResponse.json(
@@ -130,6 +75,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const clientIp = normalizeClientIp(
+        request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-forwarded-for") ||
+        request.headers.get("x-real-ip"),
+    );
+    const subjectKey = buildLoginSubjectKey(clientIp, ecode);
 
     const turnstileResult = await verifyTurnstileToken({
       token: turnstileToken || "",
@@ -185,6 +137,33 @@ export async function POST(request: Request) {
         userFound: false,
       });
 
+      const loginAttempt = await recordLoginAttempt(pool, {
+        subjectKey,
+        ipAddress: clientIp,
+        ecode,
+      });
+
+      if (loginAttempt.status === "banned") {
+        return NextResponse.json(
+          {
+            message: "Too many sign-in attempts. Try again in 1 minute.",
+            retryAfterSeconds: loginAttempt.retryAfterSeconds,
+            warning: loginAttempt.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
+
+      if (loginAttempt.status === "warning") {
+        return NextResponse.json(
+          {
+            message: loginAttempt.warningMessage || "Warning: repeated sign-in clicks detected.",
+            warning: loginAttempt.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
+
       return NextResponse.json(
         { message: "Invalid credentials" },
         { status: 401 }
@@ -197,6 +176,33 @@ export async function POST(request: Request) {
         ecode,
         userFound: Boolean(user),
       });
+
+      const loginAttempt = await recordLoginAttempt(pool, {
+        subjectKey,
+        ipAddress: clientIp,
+        ecode,
+      });
+
+      if (loginAttempt.status === "banned") {
+        return NextResponse.json(
+          {
+            message: "Too many sign-in attempts. Try again in 1 minute.",
+            retryAfterSeconds: loginAttempt.retryAfterSeconds,
+            warning: loginAttempt.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
+
+      if (loginAttempt.status === "warning") {
+        return NextResponse.json(
+          {
+            message: loginAttempt.warningMessage || "Warning: repeated sign-in clicks detected.",
+            warning: loginAttempt.warningMessage,
+          },
+          { status: 429 }
+        );
+      }
 
       return NextResponse.json(
         { message: "Invalid credentials" },

@@ -20,7 +20,13 @@ export function normalizeClientIp(value: string | null) {
   return value.split(",")[0]?.trim() || "unknown";
 }
 
-export function buildLoginSubjectKey(ipAddress: string) {
+export function buildLoginSubjectKey(ipAddress: string, ecode?: string | null) {
+  const normalizedEcode = ecode?.trim().toUpperCase();
+
+  if (normalizedEcode) {
+    return `${normalizedEcode}:${ipAddress}`;
+  }
+
   return ipAddress;
 }
 
