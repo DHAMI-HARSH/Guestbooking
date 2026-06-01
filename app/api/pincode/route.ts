@@ -16,6 +16,41 @@ async function fetchWithTimeout(url: string, timeoutMs = 8000) {
   }
 }
 
+async function lookupPostalApi(pincode: string) {
+  const res = await fetchWithTimeout(`https://api.postalpincode.in/pincode/${pincode}`);
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as Array<{
+    Status?: string;
+    PostOffice?: Array<{ District?: string; State?: string }>;
+  }>;
+
+  const record = data?.[0];
+  const office = record?.PostOffice?.[0];
+  if (!office || record?.Status !== "Success") return null;
+
+  return {
+    city: office.District || "",
+    state: office.State || "",
+  };
+}
+
+async function lookupFallbackApi(pincode: string) {
+  const res = await fetchWithTimeout(`https://api.zippopotam.us/in/${pincode}`);
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    places?: Array<{ "place name"?: string; state?: string }>;
+  };
+  const place = data?.places?.[0];
+  if (!place) return null;
+
+  return {
+    city: place["place name"] || "",
+    state: place.state || "",
+  };
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const pincode = (searchParams.get("pincode") || "").trim();
@@ -25,36 +60,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await fetchWithTimeout(`https://api.postalpincode.in/pincode/${pincode}`);
-    const data = (await res.json()) as Array<{
-      Status?: string;
-      PostOffice?: Array<{ District?: string; State?: string }>;
-    }>;
-
-    const record = data?.[0];
-    const office = record?.PostOffice?.[0];
-    if (!office || record?.Status !== "Success") {
-      const fallbackRes = await fetchWithTimeout(`https://api.zippopotam.us/in/${pincode}`);
-      if (fallbackRes.ok) {
-        const fallback = (await fallbackRes.json()) as {
-          places?: Array<{ "place name"?: string; state?: string }>;
-        };
-        const fallbackPlace = fallback?.places?.[0];
-        if (fallbackPlace) {
-          return NextResponse.json({
-            city: fallbackPlace["place name"] || "",
-            state: fallbackPlace.state || "",
-          });
-        }
-      }
-
-      return NextResponse.json({ message: "Pincode not found" }, { status: 404 });
+    const primary = await lookupPostalApi(pincode).catch(() => null);
+    if (primary) {
+      return NextResponse.json(primary);
     }
 
-    return NextResponse.json({
-      city: office.District || "",
-      state: office.State || "",
-    });
+    const fallback = await lookupFallbackApi(pincode).catch(() => null);
+    if (fallback) {
+      return NextResponse.json(fallback);
+    }
+
+    return NextResponse.json({ message: "Pincode not found" }, { status: 404 });
   } catch (error) {
     return NextResponse.json(
       { message: "Failed to lookup pincode", detail: error instanceof Error ? error.message : "Unknown error" },
