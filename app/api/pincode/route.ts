@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function fetchWithTimeout(url: string, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -11,7 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+    const res = await fetchWithTimeout(`https://api.postalpincode.in/pincode/${pincode}`);
     const data = (await res.json()) as Array<{
       Status?: string;
       PostOffice?: Array<{ District?: string; State?: string }>;
@@ -20,6 +34,20 @@ export async function GET(request: NextRequest) {
     const record = data?.[0];
     const office = record?.PostOffice?.[0];
     if (!office || record?.Status !== "Success") {
+      const fallbackRes = await fetchWithTimeout(`https://api.zippopotam.us/in/${pincode}`);
+      if (fallbackRes.ok) {
+        const fallback = (await fallbackRes.json()) as {
+          places?: Array<{ "place name"?: string; state?: string }>;
+        };
+        const fallbackPlace = fallback?.places?.[0];
+        if (fallbackPlace) {
+          return NextResponse.json({
+            city: fallbackPlace["place name"] || "",
+            state: fallbackPlace.state || "",
+          });
+        }
+      }
+
       return NextResponse.json({ message: "Pincode not found" }, { status: 404 });
     }
 

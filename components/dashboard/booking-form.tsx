@@ -326,7 +326,9 @@ export function BookingForm({ onCreated }: BookingFormProps) {
       setPincodeLoading(true);
       setPincodeStatus(null);
       try {
-        const res = await fetch(`/api/pincode?pincode=${encodeURIComponent(pincode)}`);
+        const res = await fetch(`/api/pincode?pincode=${encodeURIComponent(pincode)}`, {
+          cache: "no-store",
+        });
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.message || "Pincode lookup failed");
