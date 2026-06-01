@@ -158,7 +158,7 @@ export function EstatePrimaryPanel() {
       <CardHeader className="border-b">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Estate Manager Primary Dashboard</CardTitle>
+            <CardTitle>Manager Panel</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
               View and manage booking allocations
             </p>

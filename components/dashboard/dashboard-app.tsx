@@ -90,9 +90,9 @@ export function DashboardApp({ user }: DashboardAppProps) {
         <TabsList className="flex h-auto w-full flex-wrap gap-2 bg-transparent p-0">
           {showEmployeeTabs ? <TabsTrigger value="booking">Booking</TabsTrigger> : null}
           {showEmployeeTabs ? <TabsTrigger value="my-bookings">My Bookings</TabsTrigger> : null}
-          {showEmployeeTabs ? <TabsTrigger value="manage">Cancellation / Modify</TabsTrigger> : null}
+          {showEmployeeTabs ? <TabsTrigger value="manage">Cancel Booking</TabsTrigger> : null}
           {showApproverTabs ? <TabsTrigger value="approval">Approval</TabsTrigger> : null}
-          {showEstateTabs ? <TabsTrigger value="estate-primary">Estate Primary</TabsTrigger> : null}
+          {showEstateTabs ? <TabsTrigger value="estate-primary">Manager Panel</TabsTrigger> : null}
           {!showEmployeeTabs && canSelfBook ? <TabsTrigger value="self-booking">Self Booking</TabsTrigger> : null}
           {canViewReports ? <TabsTrigger value="reports">Reports</TabsTrigger> : null}
           {isAdmin ? <TabsTrigger value="admin">Admin</TabsTrigger> : null}

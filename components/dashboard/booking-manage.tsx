@@ -163,7 +163,7 @@ export function BookingManage({ onChanged, refreshKey }: BookingManageProps) {
     <Card className="overflow-hidden border-slate-200/80 shadow-sm">
       <CardHeader className="space-y-2 border-b bg-gradient-to-r from-slate-50 via-white to-sky-50/60">
         <div className="space-y-1">
-          <CardTitle className="text-xl text-slate-900">Cancellation / Modify Booking</CardTitle>
+          <CardTitle className="text-xl text-slate-900">Cancel Booking</CardTitle>
           <p className="max-w-3xl text-sm text-slate-600">
             Search and manage guest reservations. Use the filters below to locate a specific booking for modification or cancellation requests.
           </p>
