@@ -621,9 +621,6 @@ export function BookingForm({ onCreated }: BookingFormProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (loading || showSubmitConfirm) return;
-    setSubmitConfirmation("");
-    setShowSubmitConfirm(true);
   }
 
   return (
@@ -1153,7 +1150,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                 Food reservations: {form.food_reservations.length} row(s), {totalFoodCoverCount} total covers
               </p>
               <p className="text-xs text-muted-foreground">
-                Use Arrange Food to set exact meal counts by date. This also works for non-staying guests.
+                Food rows are optional. Use Arrange Food only for special occasions or when exact meal counts are needed.
               </p>
             </div>
             {fieldErrors.food_reservations ? (
@@ -1360,7 +1357,15 @@ export function BookingForm({ onCreated }: BookingFormProps) {
                   Next
                 </Button>
               ) : (
-                <Button type="submit" disabled={loading}>
+                <Button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    if (loading) return;
+                    setSubmitConfirmation("");
+                    setShowSubmitConfirm(true);
+                  }}
+                >
                   {loading ? "Submitting..." : "Submit Booking"}
                 </Button>
               )}
@@ -1372,7 +1377,7 @@ export function BookingForm({ onCreated }: BookingFormProps) {
         </div>
         </form>
       </CardContent>
-      {showSubmitConfirm ? (
+      {currentStep === reviewStepIndex && showSubmitConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-2xl border bg-white p-6 shadow-2xl">
             <div className="space-y-2">

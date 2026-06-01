@@ -177,14 +177,6 @@ export const bookingSchema = bookingBaseSchema.superRefine((data, ctx) => {
     ["Breakfast", "Lunch", "Dinner"].includes(service)
   );
 
-  if (selectedMeals.length > 0 && data.food_reservations.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["food_reservations"],
-      message: "Add at least one food reservation when meal services are selected",
-    });
-  }
-
   data.food_reservations.forEach((reservation, index) => {
     const reservationDate = parseLocalDate(reservation.date);
 
